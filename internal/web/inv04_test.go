@@ -33,11 +33,16 @@ func ejerceTodasLasPantallas(t *testing.T) *stubAPI {
 		"POST /api/v1/members":                             {http.StatusNoContent, ""},
 		"POST /api/v1/members/{user_id}/roles":             {http.StatusNoContent, ""},
 		"DELETE /api/v1/members/{user_id}/roles/{role_id}": {http.StatusNoContent, ""},
+		// Sesiones (T2.1): la pantalla y sus dos mutaciones.
+		"GET /api/v1/sessions": {http.StatusOK, sesionesBody(
+			`{"session_id":"` + testSessionID + `","edge_id":"edge-alpha","state":"online","profile":"active"}`)},
+		"POST /api/v1/messages":              {http.StatusOK, `{"acked_command_id":"cmd-1","ok":true}`},
+		"POST /api/v1/sessions/{id}/profile": {http.StatusOK, `{"session_id":"` + testSessionID + `","profile":"passive"}`},
 	})
 	router := adminRouter(api)
 	sess := clientSessionCookie(t)
 
-	for _, ruta := range []string{"/", "/miembros", "/roles"} {
+	for _, ruta := range []string{"/", "/sesiones", "/miembros", "/roles"} {
 		if rec := getWithSession(t, router, ruta); rec.Code != http.StatusOK {
 			t.Fatalf("GET %s status = %d, want 200", ruta, rec.Code)
 		}
@@ -51,8 +56,13 @@ func ejerceTodasLasPantallas(t *testing.T) *stubAPI {
 		url.Values{"user_id": {testOtherUserID}, "role_id": {testTenantRoleID}}, sess)
 	postFormWithCSRF(router, "/roles/retirar",
 		url.Values{"user_id": {testOtherUserID}, "role_id": {testTenantRoleID}}, sess)
+	// Las dos mutaciones de sesiones. El envío es la única llamada de esta consola cuyo cuerpo lleva
+	// texto escrito por el usuario, así que es por donde un `tenant_id` se colaría sin que se note.
+	postFormWithCSRF(router, "/sesiones/enviar",
+		url.Values{"session_id": {testSessionID}, "to": {"+593990000002"}, "text": {"hola"}}, sess)
+	postFormWithCSRF(router, "/sesiones/"+testSessionID+"/perfil", url.Values{"profile": {"passive"}}, sess)
 
-	if len(api.Requests()) < 9 {
+	if len(api.Requests()) < 13 {
 		t.Fatalf("solo se capturaron %d peticiones: el recorrido no ejercitó la superficie completa (%v)",
 			len(api.Requests()), routesOf(api.Requests()))
 	}

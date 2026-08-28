@@ -180,6 +180,20 @@ func NewRouterWithLimiter(cfg *config.Config) (*gin.Engine, func()) {
 	protected.POST("/miembros", adminH.AddMember)
 	protected.POST("/miembros/:user_id/baja", adminH.RemoveMember)
 
+	// Sesiones (T2.1): los teléfonos vinculados de la empresa, su perfil y el envío de prueba.
+	//
+	// 🔴 SIN RequireFeature, y no por olvido: en el BFF esto es capacidad base —una empresa con
+	// cualquier plan tiene que poder ver sus teléfonos y cambiarles el perfil— y aquí también. Quien
+	// venga a gatearlo estaría cortando el acceso de un tenant a su propia flota; el gate por plan de
+	// esta consola cuelga de `catalog_import` (ver internal/web/entitlements.go · D-047.10).
+	//
+	// El envío va a /sesiones/enviar, con el verbo estático ANTES del parámetro: Gin resuelve bien un
+	// hermano estático y uno con `:id` (comprobado), y lo único que esa vecindad se come es una sesión
+	// que se llamara literalmente «enviar», que no existe (los identificadores son UUID).
+	protected.GET("/sesiones", adminH.ShowSessions)
+	protected.POST("/sesiones/enviar", adminH.SendTestMessage)
+	protected.POST("/sesiones/:id/perfil", adminH.SetSessionProfile)
+
 	// Roles (T1.3). Asignar y retirar cuelgan de /roles y no de /miembros porque lo que mueven es un
 	// PERMISO: consumen `roles.write`, igual que crear un rol.
 	protected.GET("/roles", adminH.ShowRoles)
