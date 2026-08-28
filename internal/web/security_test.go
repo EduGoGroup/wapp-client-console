@@ -35,14 +35,89 @@ func paginasRenderizadas(t *testing.T, router http.Handler) map[string]*httptest
 		renders[nombre] = rec
 	}
 
-	// El login fallido es la quinta página: se renderiza en la respuesta de un POST, no de un GET.
+	// El login fallido se renderiza en la respuesta de un POST, no de un GET.
 	identity := identityReturning(t, http.StatusUnauthorized)
 	routerFallo := NewRouter(testConfig("http://127.0.0.1:8103", identity.URL))
 	renders["login_fallido"] = postFormWithCSRF(routerFallo, "/login", url.Values{
 		"email": {loginEmail}, "password": {loginPassword},
 	}, nil)
 
+	// Las pantallas de administración necesitan un upstream que CONTESTE: contra el router offline
+	// degradarían a su estado vacío y esta familia de tests no vería ni las tablas, ni los
+	// formularios, ni el bloque gateado por plan — que es justo donde se cuela un `style=` o un
+	// `<script>`. Un router aparte con el doble de la API pública los pinta enteros.
+	api := newStubAPI(t, map[string]stubResponse{
+		"GET /api/v1/entitlements": {http.StatusOK, entitlementsBody("commerce", "catalog_import", "menu")},
+		"GET /api/v1/members":      {http.StatusOK, membersBody(testUserID, testOtherUserID)},
+		"GET /api/v1/roles":        {http.StatusOK, rolesBody},
+	})
+	routerAdmin := adminRouter(api)
+	for nombre, ruta := range map[string]string{
+		"home_con_plan":    "/",
+		"miembros":         "/miembros",
+		"roles":            "/roles",
+		"mi_identificador": "/mi-identificador",
+	} {
+		rec := getWithSession(t, routerAdmin, ruta)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("la página %q respondió %d, want 200. Body: %s", nombre, rec.Code, rec.Body.String())
+		}
+		renders[nombre] = rec
+	}
+
+	// Las pantallas de administración con AVISO: el texto del catálogo de flash también se sirve, y
+	// es la rama por la que entra un mensaje que alguien construyera concatenando.
+	renders["miembros_con_aviso"] = getWithSession(t, routerAdmin, "/miembros?error="+flashNotInYourTenant)
+	renders["roles_con_exito"] = getWithSession(t, routerAdmin, "/roles?success="+flashRoleAssigned)
+
+	// Y las MISMAS pantallas en el estado «sin empresa», que es otra rama de plantilla —el parcial
+	// sin_empresa— y por tanto otro HTML que puede traer un style= o un <script> sin que ninguna de
+	// las capturas de arriba lo vea.
+	sinTenant := sessionCookieFor(t, testUserID, "")
+	for nombre, ruta := range map[string]string{
+		"home_sin_empresa":             "/",
+		"miembros_sin_empresa":         "/miembros",
+		"roles_sin_empresa":            "/roles",
+		"mi_identificador_sin_empresa": "/mi-identificador",
+	} {
+		rec := getConCookie(routerAdmin, ruta, sinTenant)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("la página %q respondió %d, want 200. Body: %s", nombre, rec.Code, rec.Body.String())
+		}
+		renders[nombre] = rec
+	}
+
 	return renders
+}
+
+// TestPaginas_TodasLasPantallasAutenticadasEstanCubiertas evita el agujero silencioso de esta
+// familia: los tests de CSP recorren `paginasRenderizadas`, así que una pantalla nueva que no se
+// añada ahí queda sin vigilar y nadie lo nota, porque todo sigue verde.
+//
+// Aquí se compara contra las rutas GET que el router registra de verdad, no contra una lista escrita
+// a mano: si mañana aparece /pedidos y nadie la añade al mapa, esto cae.
+func TestPaginas_TodasLasPantallasAutenticadasEstanCubiertas(t *testing.T) {
+	t.Parallel()
+
+	router := NewRouter(offlineConfig())
+	rutasGET := make(map[string]bool)
+	for _, ruta := range router.Routes() {
+		if ruta.Method != http.MethodGet || strings.HasPrefix(ruta.Path, "/static/") ||
+			ruta.Path == "/healthz" || ruta.Path == "/login" {
+			continue
+		}
+		rutasGET[ruta.Path] = true
+	}
+
+	cubiertas := map[string]bool{"/": true, "/miembros": true, "/roles": true, "/mi-identificador": true}
+	for ruta := range rutasGET {
+		if !cubiertas[ruta] {
+			t.Errorf("la pantalla %q no está en paginasRenderizadas: los tests de CSP no la miran", ruta)
+		}
+	}
+	if len(rutasGET) != len(cubiertas) {
+		t.Errorf("el router sirve %d pantallas autenticadas y el mapa cubre %d", len(rutasGET), len(cubiertas))
+	}
 }
 
 // TestTemplates_SinEstilosInline: la CSP (`style-src 'self' 'nonce-…'`) no admite atributos

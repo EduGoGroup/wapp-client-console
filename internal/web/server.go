@@ -2,8 +2,9 @@
 //
 // Lo que este paquete custodia desde el primer commit es la cadena de middleware endurecida de
 // `wapp-shared/web` con los nombres de cookie propios de esta consola (ver session.go). Encima de
-// ella vive el ciclo de sesión —login, logout y el AuthMiddleware (auth_handler.go)— y la pantalla
-// autenticada mínima. Las pantallas de negocio llegan en la tanda siguiente.
+// ella vive el ciclo de sesión —login, logout y el AuthMiddleware (auth_handler.go)— y las pantallas
+// de administración del tenant: la portada, los miembros y los roles (admin_handler.go y compañía),
+// que hablan con la API pública :8103 a través de internal/apiclient.
 package web
 
 import (
@@ -14,6 +15,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/EduGoGroup/wapp-client-console/internal/apiclient"
 	"github.com/EduGoGroup/wapp-client-console/internal/config"
 	"github.com/EduGoGroup/wapp-shared/iam"
 	"github.com/EduGoGroup/wapp-shared/ui"
@@ -142,15 +144,42 @@ func NewRouterWithLimiter(cfg *config.Config) (*gin.Engine, func()) {
 
 	authH := NewAuthHandler(cfg, authClient)
 
+	// El cliente de la API PÚBLICA (:8103), el único upstream de negocio de esta consola. Comparte el
+	// plazo por petición con el resto de la cadena: un upstream sin plazo cuelga la pantalla entera.
+	adminH := NewAdminHandler(authH, apiclient.New(cfg.PublicAPIBaseURL, cfg.UpstreamTimeout))
+
 	// Rutas públicas: la entrada y la salida.
 	router.GET("/login", authH.ShowLogin)
 	router.POST("/login", authH.DoLogin)
 	router.POST("/logout", authH.DoLogout)
 
-	// Rutas protegidas. Hoy solo la pantalla de sesión; las de negocio cuelgan de aquí.
+	// Rutas protegidas: todo lo que hay detrás de la sesión.
+	//
+	// 🔴 Los verbos son HTML puro (GET y POST) y no PUT/DELETE: esta consola es server-side rendering
+	// sin una línea de JavaScript, y un formulario HTML solo sabe hacer esas dos cosas. La consola
+	// hace POST y el cliente de la API traduce al verbo que la plataforma espera —DELETE para la baja
+	// y para retirar un rol—. Cambiar esto por fetch() significaría meter JS y, con él, un nonce en
+	// cada página; ver security_test.go.
 	protected := router.Group("/")
 	protected.Use(authH.AuthMiddleware())
-	protected.GET("/", showHome)
+	protected.GET("/", adminH.ShowHome)
+
+	// «Mi identificador» va la PRIMERA de las protegidas y fuera de todo lo demás a propósito: es la
+	// única pantalla que sirve a una sesión SIN empresa, y es la que hace utilizable el resto (quien
+	// administra no puede buscar a nadie por su correo, así que la persona tiene que aportar su
+	// identificador). No llama a la API pública.
+	protected.GET("/mi-identificador", adminH.ShowMyIdentifier)
+
+	// Miembros (T1.4a). No hay ruta de ALTA: está bloqueada (ver AdminHandler).
+	protected.GET("/miembros", adminH.ShowMembers)
+	protected.POST("/miembros/:user_id/baja", adminH.RemoveMember)
+
+	// Roles (T1.3). Asignar y retirar cuelgan de /roles y no de /miembros porque lo que mueven es un
+	// PERMISO: consumen `roles.write`, igual que crear un rol.
+	protected.GET("/roles", adminH.ShowRoles)
+	protected.POST("/roles", adminH.CreateRole)
+	protected.POST("/roles/asignar", adminH.AssignRole)
+	protected.POST("/roles/retirar", adminH.UnassignRole)
 
 	var cleanup func()
 	if rateLimiter != nil {

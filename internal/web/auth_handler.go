@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/EduGoGroup/wapp-client-console/internal/apiclient"
 	"github.com/EduGoGroup/wapp-client-console/internal/config"
 	"github.com/EduGoGroup/wapp-shared/iam"
 	sharedweb "github.com/EduGoGroup/wapp-shared/web"
@@ -233,6 +234,32 @@ func (h *AuthHandler) refreshSession(c *gin.Context, refreshToken string) (*iam.
 	}
 	_ = h.startSession(c, res)
 	return res, nil
+}
+
+// withAuthRetry ejecuta una llamada de negocio con el Context Token de la sesión y, si la plataforma
+// responde 401, refresca UNA vez y reintenta.
+//
+// El reintento es de UNO solo y a propósito: si el token recién refrescado también se rechaza, el
+// problema no es la caducidad —es que la sesión ya no vale—, y repetir solo alargaría la espera del
+// usuario antes del mismo desenlace. Quien recibe el 401 persistente decide expulsar a /login.
+//
+// Devuelve el error de la PRIMERA llamada cuando el refresco falla: el 401 original es lo que
+// describe lo que pasó, no el fallo del refresco, que es una consecuencia.
+func (h *AuthHandler) withAuthRetry(c *gin.Context, fn func(accessToken string) error) error {
+	err := fn(webgin.AccessTokenFromContext(c))
+	if !errors.Is(err, apiclient.ErrUnauthorized) {
+		return err
+	}
+
+	refreshToken := webgin.RefreshTokenFromContext(c)
+	if refreshToken == "" {
+		return err
+	}
+	res, rerr := h.refreshSession(c, refreshToken)
+	if rerr != nil || res == nil {
+		return err
+	}
+	return fn(res.AccessToken)
 }
 
 // renderLogin pinta la pantalla de entrada.

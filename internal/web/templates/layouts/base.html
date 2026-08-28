@@ -23,7 +23,17 @@
             </span>
         </a>
         {{ if .IsAuthenticated }}
-        <nav class="app-bar__actions">
+        <nav class="app-bar__actions" aria-label="Secciones">
+            <a href="/" class="btn btn--text{{ if eq .CurrentPath "/" }} btn--activo{{ end }}">Inicio</a>
+            {{/* Administrar solo se ofrece a quien tiene empresa: sin ella esas dos pantallas no
+                 pueden hacer nada, y un enlace que lleva a una explicación de por qué no funciona es
+                 peor que no ofrecerlo. «Mi identificador» lo ve todo el mundo — es lo único que una
+                 sesión sin empresa puede usar, y es lo que la saca de ese estado. */}}
+            {{ if .TenantID }}
+            <a href="/miembros" class="btn btn--text{{ if eq .CurrentPath "/miembros" }} btn--activo{{ end }}">Miembros</a>
+            <a href="/roles" class="btn btn--text{{ if eq .CurrentPath "/roles" }} btn--activo{{ end }}">Roles</a>
+            {{ end }}
+            <a href="/mi-identificador" class="btn btn--text{{ if eq .CurrentPath "/mi-identificador" }} btn--activo{{ end }}">Mi identificador</a>
             <form method="POST" action="/logout" class="app-bar__logout-form">
                 <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
                 <button type="submit" class="btn btn--text">Cerrar sesión</button>

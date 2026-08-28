@@ -1,0 +1,80 @@
+{{ define "miembros.html" }}
+<section class="page-wide">
+    {{ if .SinEmpresa }}
+    {{ template "sin_empresa" . }}
+    {{ else }}
+    <div class="wapp-card">
+        <h1 class="wapp-title">Miembros de tu empresa</h1>
+        <p class="wapp-subtitle">
+            Quién pertenece a tu empresa en wApp. Dar de baja retira la pertenencia, no la cuenta:
+            la persona sigue existiendo en el proveedor de identidad.
+        </p>
+
+        {{ template "flashes" . }}
+
+        {{/*
+        La empresa se pinta como DATO, no como control, y aquí NO HAY SELECTOR DE EMPRESAS.
+
+        Hoy una sesión tiene exactamente una: el canje del token falla con ErrMultipleTenants si la
+        persona pertenece a más de una (MD-055.2), así que un selector no tendría entre qué elegir y
+        ofrecerlo sería prometer un cambio que la sesión no puede hacer. El día que el canje sepa
+        elegir empresa, el control aparece justo aquí.
+        */}}
+        <dl class="session-facts">
+            <dt class="session-facts__term">Empresa</dt>
+            <dd class="session-facts__value" id="tenant-actual">{{ .TenantID }}</dd>
+        </dl>
+
+        <p class="section-note" id="nota-identidad">
+            wApp no guarda el nombre ni el correo de las personas: solo su identificador. La identidad
+            vive en el proveedor de identidad del grupo, y es ahí donde se consulta o se corrige.
+            Pasa el ratón por encima de un identificador para verlo completo.
+        </p>
+
+        {{ if .Members }}
+        <table class="data-table" id="table-members">
+            <caption class="data-table__caption">Personas dadas de alta en esta empresa</caption>
+            <thead>
+                <tr>
+                    <th scope="col">Identificador</th>
+                    <th scope="col">Alta</th>
+                    <th scope="col">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{ range .Members }}
+                <tr>
+                    <td>
+                        <code class="mono" title="{{ .UserID }}">{{ .Short }}</code>
+                        {{ if .IsSelf }}<span class="chip chip--info">tú</span>{{ end }}
+                    </td>
+                    <td class="mono">{{ if .JoinedAt }}{{ .JoinedAt }}{{ else }}—{{ end }}</td>
+                    <td>
+                        {{ if .IsSelf }}
+                        <span class="section-note">No puedes darte de baja a ti mismo.</span>
+                        {{ else }}
+                        <form method="POST" action="/miembros/{{ .UserID }}/baja" class="inline-form">
+                            <input type="hidden" name="csrf_token" value="{{ $.CSRFToken }}">
+                            <button type="submit" class="btn btn--danger">Dar de baja</button>
+                        </form>
+                        {{ end }}
+                    </td>
+                </tr>
+                {{ end }}
+            </tbody>
+        </table>
+        {{ else }}
+        <p class="empty-state" id="members-vacio">
+            Todavía no hay nadie más en esta empresa.
+        </p>
+        {{ end }}
+
+        <p class="section-note">
+            Incorporar a alguien nuevo todavía no se hace desde aquí: hace falta el identificador que
+            esa persona tiene en el proveedor de identidad, y esta consola aún no sabe resolverlo
+            desde un correo.
+        </p>
+    </div>
+    {{ end }}
+</section>
+{{ end }}

@@ -1,0 +1,129 @@
+{{ define "roles.html" }}
+<section class="page-wide">
+    {{ if .SinEmpresa }}
+    {{ template "sin_empresa" . }}
+    {{ else }}
+    <div class="wapp-card">
+        <h1 class="wapp-title">Roles de tu empresa</h1>
+        <p class="wapp-subtitle">
+            Un rol agrupa permisos. Asignar un rol a una persona es darle todo lo que ese rol permite.
+        </p>
+
+        {{ template "flashes" . }}
+
+        {{ if .Roles }}
+        <table class="data-table" id="table-roles">
+            <caption class="data-table__caption">Roles visibles para tu empresa</caption>
+            <thead>
+                <tr>
+                    <th scope="col">Rol</th>
+                    <th scope="col">Origen</th>
+                    <th scope="col">Hereda de</th>
+                    <th scope="col">Identificador</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{ range .Roles }}
+                <tr>
+                    <td>{{ .Name }}</td>
+                    <td>
+                        {{ if .Global }}
+                        <span class="chip chip--muted">{{ .Origen }}</span>
+                        {{ else }}
+                        <span class="chip chip--ok">{{ .Origen }}</span>
+                        {{ end }}
+                    </td>
+                    <td>{{ if .Parent }}{{ .Parent }}{{ else }}—{{ end }}</td>
+                    <td><code class="mono" title="{{ .RoleID }}">{{ .Short }}</code></td>
+                </tr>
+                {{ end }}
+            </tbody>
+        </table>
+        <p class="section-note">
+            Las plantillas del ecosistema son comunes a todas las empresas: se pueden asignar, pero no
+            se editan desde aquí.
+        </p>
+        {{ else }}
+        <p class="empty-state" id="roles-vacio">No hay roles visibles para tu empresa.</p>
+        {{ end }}
+    </div>
+
+    <div class="wapp-card card-stacked" id="section-crear-rol">
+        <h2 class="section-title">Crear un rol</h2>
+        <p class="section-note">
+            El rol nace en tu empresa. Si eliges un rol del que heredar, el nuevo parte de sus permisos.
+        </p>
+        <form method="POST" action="/roles" class="stack-form" id="form-create-role">
+            <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="role-name">Nombre del rol</label>
+                <input class="wapp-field__control" type="text" id="role-name" name="name"
+                       required maxlength="64" placeholder="Encargada de pedidos">
+            </div>
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="role-parent">Hereda de (opcional)</label>
+                <select class="wapp-field__control" id="role-parent" name="parent_role_id">
+                    <option value="">Sin herencia (rol raíz)</option>
+                    {{ range .Roles }}
+                    <option value="{{ .RoleID }}">{{ .Name }}</option>
+                    {{ end }}
+                </select>
+            </div>
+            <div class="wapp-actions">
+                <button type="submit" class="btn btn--primary">Crear rol</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="wapp-card card-stacked" id="section-asignacion">
+        <h2 class="section-title">Rol de una persona</h2>
+        {{/*
+        🔴 La plataforma NO expone hoy «qué roles tiene esta persona»: en el plano público hay POST y
+        DELETE sobre /api/v1/members/{user_id}/roles, pero no un GET. Esta pantalla asigna y retira; el
+        estado actual no es consultable, y se dice en vez de fingirse con una lista vacía que se leería
+        como «no tiene ninguno».
+        */}}
+        <p class="section-note" id="nota-sin-lectura-de-roles">
+            La plataforma todavía no permite consultar qué roles tiene ya una persona: desde aquí se
+            asigna y se retira, pero la lista de lo que cada quien tiene hoy no se puede mostrar.
+            Retirar un rol que no tenía no rompe nada.
+        </p>
+
+        {{ if and .Members .Roles }}
+        <form method="POST" action="/roles/asignar" class="stack-form" id="form-role-assignment">
+            <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="assign-user">Persona</label>
+                <select class="wapp-field__control" id="assign-user" name="user_id" required>
+                    {{ range .Members }}
+                    <option value="{{ .UserID }}">{{ .Short }}{{ if .IsSelf }} (tú){{ end }}</option>
+                    {{ end }}
+                </select>
+            </div>
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="assign-role">Rol</label>
+                <select class="wapp-field__control" id="assign-role" name="role_id" required>
+                    {{ range .Roles }}
+                    <option value="{{ .RoleID }}">{{ .Name }}</option>
+                    {{ end }}
+                </select>
+            </div>
+            {{/*
+            Dos botones sobre UN formulario con `formaction`: los dos mandan exactamente los mismos
+            dos campos, y duplicar el formulario entero solo daría dos sitios donde el par de <select>
+            se desincroniza. Es HTML puro — sin una línea de JavaScript, que la CSP no admitiría.
+            */}}
+            <div class="wapp-actions actions-row">
+                <button type="submit" class="btn btn--primary" formaction="/roles/asignar">Asignar rol</button>
+                <button type="submit" class="btn btn--danger" formaction="/roles/retirar">Retirar rol</button>
+            </div>
+        </form>
+        {{ else }}
+        <p class="empty-state" id="asignacion-no-disponible">
+            Hace falta al menos una persona y un rol para poder asignar.
+        </p>
+        {{ end }}
+    </div>
+    {{ end }}
+</section>
+{{ end }}

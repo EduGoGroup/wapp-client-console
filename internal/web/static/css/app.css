@@ -158,3 +158,178 @@ body {
   color: var(--wapp-color-on-surface);
   overflow-wrap: anywhere;
 }
+
+/* --- Navegación activa de la barra --- */
+.btn--activo {
+  background-color: rgba(255, 255, 255, 0.18);
+}
+
+/* --- Página ancha (las tablas de administración no caben en 720px) --- */
+.page-wide {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: var(--wapp-space-8) var(--wapp-space-4);
+}
+
+.card-stacked {
+  margin-top: var(--wapp-space-6);
+}
+
+.section-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--wapp-color-on-surface);
+  margin-bottom: var(--wapp-space-2);
+}
+
+.section-note {
+  font-size: 0.85rem;
+  color: var(--wapp-color-on-surface-variant);
+  line-height: 1.5;
+  margin-bottom: var(--wapp-space-2);
+}
+
+.empty-state {
+  margin-top: var(--wapp-space-4);
+  padding: var(--wapp-space-6);
+  border: 1px dashed var(--wapp-color-border-variant);
+  border-radius: var(--wapp-radius-md);
+  text-align: center;
+  color: var(--wapp-color-on-surface-variant);
+  font-size: 0.9rem;
+}
+
+/* --- Tablas de administración --- */
+.data-table {
+  width: 100%;
+  margin-top: var(--wapp-space-4);
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.data-table__caption {
+  text-align: left;
+  font-size: 0.8rem;
+  color: var(--wapp-color-on-surface-variant);
+  padding-bottom: var(--wapp-space-2);
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: var(--wapp-space-3) var(--wapp-space-2);
+  border-bottom: 1px solid var(--wapp-color-border-variant);
+  vertical-align: middle;
+}
+
+.data-table th {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--wapp-color-on-surface-variant);
+}
+
+.mono {
+  font-family: var(--wapp-font-mono);
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+/* --- Chips --- */
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--wapp-space-2);
+  list-style: none;
+  margin-top: var(--wapp-space-3);
+}
+
+.chip {
+  display: inline-block;
+  padding: 2px var(--wapp-space-3);
+  border-radius: var(--wapp-radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.chip--ok {
+  background-color: var(--wapp-color-success-container);
+  color: var(--wapp-color-on-success);
+}
+
+.chip--info {
+  background-color: var(--wapp-color-brand-container);
+  color: var(--wapp-color-brand-on-container);
+}
+
+.chip--muted {
+  background-color: var(--wapp-color-surface-variant);
+  color: var(--wapp-color-on-surface-variant);
+}
+
+/* --- Listas de enlaces (accesos de la portada) --- */
+.link-list {
+  list-style: none;
+  margin-top: var(--wapp-space-3);
+}
+
+.link-list__item {
+  padding: var(--wapp-space-3) 0;
+  border-bottom: 1px solid var(--wapp-color-border-variant);
+}
+
+.link-list__link {
+  font-weight: 600;
+  color: var(--wapp-color-brand-primary);
+  text-decoration: none;
+}
+
+.link-list__link:hover {
+  text-decoration: underline;
+}
+
+.link-list__hint {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--wapp-color-on-surface-variant);
+}
+
+/* --- Formularios y botones de página --- */
+.stack-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wapp-space-4);
+  margin-top: var(--wapp-space-4);
+}
+
+.inline-form {
+  display: inline;
+}
+
+.actions-row {
+  display: flex;
+  gap: var(--wapp-space-3);
+  flex-wrap: wrap;
+}
+
+.btn--primary {
+  background-color: var(--wapp-color-brand-primary);
+  color: var(--wapp-color-brand-on-primary);
+}
+
+.btn--danger {
+  background-color: var(--wapp-color-error-container);
+  color: var(--wapp-color-on-error-container);
+}
+
+/* --- Campo para copiar un identificador ---
+   `user-select: all` hace que un solo clic seleccione el valor ENTERO: es lo más parecido a un botón
+   de «copiar» que se puede dar sin JavaScript, y esta consola no sirve ni una línea de JS. */
+.copy-field {
+  font-family: var(--wapp-font-mono);
+  font-size: 0.95rem;
+  user-select: all;
+  cursor: text;
+}

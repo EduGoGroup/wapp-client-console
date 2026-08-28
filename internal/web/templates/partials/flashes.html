@@ -1,0 +1,15 @@
+{{/*
+flashes es el par de avisos (error y éxito) que pintan TODAS las pantallas autenticadas.
+
+Existe como parcial porque el mismo bloque lo repetían tres páginas, y una copia a mano en cada una
+es lo que acaba sirviendo un aviso sin `role="alert"` en la pantalla que menos se mira. El texto ya
+viene traducido por el catálogo de flash: aquí nunca se pinta lo que venga del query string.
+*/}}
+{{ define "flashes" }}
+{{ if .Error }}
+<div class="wapp-snackbar wapp-snackbar--error" role="alert">{{ .Error }}</div>
+{{ end }}
+{{ if .Success }}
+<div class="wapp-snackbar wapp-snackbar--success" role="status">{{ .Success }}</div>
+{{ end }}
+{{ end }}
