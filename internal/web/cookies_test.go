@@ -3,7 +3,9 @@ package web
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
+	"time"
 
 	sharedweb "github.com/EduGoGroup/wapp-shared/web"
 )
@@ -18,10 +20,9 @@ import (
 // El test afirma los LITERALES, no las constantes del paquete: comprobar `c.Name == csrfCookieName`
 // pasaría igual con la constante cambiada, que es justo la regresión que hay que cazar.
 //
-// Todavía no hay login, así que se ejercita lo que existe:
-//   - la SIEMBRA de la cookie CSRF, sobre la cadena global de middleware (ver más abajo);
-//   - la cookie de SESIÓN, construida con las opciones de esta consola a través del propio módulo,
-//     que es el camino exacto por el que se emitirá cuando el login aterrice.
+// Se ejercitan los DOS caminos que emiten cookies de verdad, ya con login: el GET /login siembra la
+// CSRF y el POST /login la de sesión. Antes de esta tanda no había login y el test tenía que
+// conformarse con una ruta inexistente que solo atravesaba la cadena global.
 func TestCookieNames_SonLasDeEstaConsolaYNoLasDeLosOtrosDosPerimetros(t *testing.T) {
 	t.Parallel()
 
@@ -42,7 +43,9 @@ func TestCookieNames_SonLasDeEstaConsolaYNoLasDeLosOtrosDosPerimetros(t *testing
 			sharedweb.DefaultCSRFCookieName, sharedweb.DefaultSessionCookieName)
 	}
 
-	cfg := testConfig()
+	identity := newFakeIdentity(t)
+	platform := newFakePlatform(t, makeContextToken(t, time.Now().Add(time.Hour)))
+	cfg := testConfig(platform.URL, identity.URL)
 	router := NewRouter(cfg)
 
 	vistas := map[string]bool{}
@@ -67,19 +70,28 @@ func TestCookieNames_SonLasDeEstaConsolaYNoLasDeLosOtrosDosPerimetros(t *testing
 			recHealth.Result().Cookies())
 	}
 
-	// Una petición que sí atraviesa la cadena global completa: el CSRF está montado con `Use`, de
-	// modo que cubre también el camino sin ruta. Es lo único que hay hasta que aterricen las
-	// pantallas, y basta para probar que el nombre sembrado es el nuestro.
-	recSeed := httptest.NewRecorder()
-	router.ServeHTTP(recSeed, httptest.NewRequest(http.MethodGet, "/ruta-que-no-existe", nil))
-	revisar("la cadena global", recSeed)
+	// GET /login: siembra la cookie CSRF.
+	recLogin := httptest.NewRecorder()
+	router.ServeHTTP(recLogin, httptest.NewRequest(http.MethodGet, "/login", nil))
+	revisar("GET /login", recLogin)
 
-	if !vistas["wapp_client_csrf"] {
-		t.Errorf("la cookie %q no se sembró; cookies vistas: %v", "wapp_client_csrf", vistas)
+	// POST /login: emite además la de sesión.
+	recPost := postFormWithCSRF(router, "/login", url.Values{
+		"email":    {loginEmail},
+		"password": {loginPassword},
+	}, nil)
+	if recPost.Code != http.StatusSeeOther {
+		t.Fatalf("POST /login status = %d, want 303. Body: %s", recPost.Code, recPost.Body.String())
+	}
+	revisar("POST /login", recPost)
+
+	for _, esperada := range []string{"wapp_client_csrf", "wapp_client_session"} {
+		if !vistas[esperada] {
+			t.Errorf("la cookie %q no se emitió; cookies vistas: %v", esperada, vistas)
+		}
 	}
 
-	// La de sesión aún no la emite ningún handler; se verifica el camino por el que se emitirá:
-	// opciones de esta consola → módulo compartido → cookie en el cable.
+	// Y el camino por el que el módulo la construye, por si un día alguien deja de pasar el nombre.
 	sess := sharedweb.SessionCookie(sessionCookieOptions(cfg), "valor-de-prueba", 60)
 	if _, prohibida := prohibidos[sess.Name]; prohibida {
 		t.Errorf("la cookie de sesión saldría como %q, que es de otro perímetro", sess.Name)

@@ -1,0 +1,160 @@
+/* ==========================================================================
+   wApp Client Console — hoja PROPIA de esta consola.
+
+   Aquí va solo el MARCO: la barra superior, el contenedor de página y la tarjeta
+   de datos de la sesión. Los componentes reutilizables del ecosistema —tarjetas,
+   campos, botones `wapp-btn`, snackbars, la caja de login— NO se copian: los
+   sirve `wapp-shared/ui` (wapp-tokens.css + wapp-components.css) y esta consola
+   los consume. Duplicarlos aquí sería la tercera copia del mismo CSS.
+
+   Los colores salen de los tokens; la barra usa las variables del tema del
+   perímetro del CLIENTE (theme-bff.css), con fallback para las que ese tema no
+   declara.
+   ========================================================================== */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  background-color: var(--wapp-color-bg);
+}
+
+body {
+  font-family: var(--wapp-font-family);
+  color: var(--wapp-color-on-bg);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- Barra superior --- */
+.app-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--wapp-space-6);
+  height: 64px;
+  background-color: var(--wapp-app-header-bg, #004D46);
+  color: var(--wapp-app-header-fg, #FFFFFF);
+  box-shadow: var(--wapp-shadow-1);
+}
+
+.app-bar__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--wapp-space-3);
+  text-decoration: none;
+  color: inherit;
+}
+
+.app-bar__logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--wapp-radius-sm);
+  background-color: var(--wapp-app-header-badge-bg, rgba(255, 255, 255, 0.15));
+  color: var(--wapp-app-header-badge-fg, #9EF2E4);
+}
+
+.app-bar__titles {
+  display: flex;
+  align-items: baseline;
+  gap: var(--wapp-space-2);
+}
+
+.app-bar__name {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.app-bar__sub {
+  font-size: 0.8rem;
+  opacity: 0.75;
+}
+
+.app-bar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--wapp-space-2);
+}
+
+.app-bar__logout-form {
+  display: inline;
+}
+
+/* --- Botón de texto de la barra (el `wapp-btn` compartido es de ancho completo) --- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--wapp-space-2) var(--wapp-space-4);
+  border: none;
+  border-radius: var(--wapp-radius-full);
+  font-family: var(--wapp-font-family);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 0.2s;
+}
+
+.btn--text {
+  background-color: transparent;
+  color: inherit;
+}
+
+.btn--text:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+/* --- Contenido --- */
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* La caja de autenticación compartida pide 100vh, que con la barra encima haría
+   scroll de más: dentro de este marco se centra en el espacio que le queda. */
+.app-main > .wapp-auth-container {
+  min-height: auto;
+  flex: 1;
+  padding: var(--wapp-space-8) var(--wapp-space-4);
+}
+
+.page-narrow {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--wapp-space-8) var(--wapp-space-4);
+}
+
+/* --- Datos de la sesión --- */
+.session-facts {
+  display: grid;
+  grid-template-columns: minmax(0, 8rem) minmax(0, 1fr);
+  gap: var(--wapp-space-2) var(--wapp-space-4);
+  margin-top: var(--wapp-space-6);
+  padding-top: var(--wapp-space-4);
+  border-top: 1px solid var(--wapp-color-border-variant);
+}
+
+.session-facts__term {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--wapp-color-on-surface-variant);
+}
+
+.session-facts__value {
+  font-family: var(--wapp-font-mono);
+  font-size: 0.85rem;
+  color: var(--wapp-color-on-surface);
+  overflow-wrap: anywhere;
+}

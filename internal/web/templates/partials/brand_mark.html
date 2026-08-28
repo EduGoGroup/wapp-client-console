@@ -1,0 +1,10 @@
+{{/*
+brand_mark es el trazo del icono de wApp (la burbuja de conversación). Existe como parcial porque el
+mismo `path` lo pintan DOS sitios con tamaños distintos —la marca de la barra superior en el layout y
+la insignia grande de la pantalla de entrada—, y una copia a mano en cada uno se desincroniza en
+cuanto alguien retoque el trazo.
+
+No incluye el `<svg>` que lo envuelve a propósito: el tamaño, el viewBox y el color son de cada sitio
+que lo usa, y meterlos aquí obligaría a parametrizarlos para acabar en el mismo sitio.
+*/}}
+{{ define "brand_mark" }}<path d="M12 2a10 10 0 0 0-8.5 15.3L2 22l4.8-1.5A10 10 0 1 0 12 2Zm0 2a8 8 0 1 1-4.2 14.8l-.3-.2-2.7.8.8-2.6-.2-.3A8 8 0 0 1 12 4Z"/>{{ end }}

@@ -1,0 +1,19 @@
+{{ define "home.html" }}
+<section class="page-narrow">
+    <div class="wapp-card">
+        <h1 class="wapp-title">Sesión iniciada</h1>
+        <p class="wapp-subtitle">
+            Esta es la sesión con la que operarás tu empresa. Las pantallas de administración
+            llegan en la tanda siguiente.
+        </p>
+
+        <dl class="session-facts">
+            <dt class="session-facts__term">Empresa</dt>
+            <dd class="session-facts__value">{{ .TenantID }}</dd>
+
+            <dt class="session-facts__term">Usuario</dt>
+            <dd class="session-facts__value">{{ .UserID }}</dd>
+        </dl>
+    </div>
+</section>
+{{ end }}
