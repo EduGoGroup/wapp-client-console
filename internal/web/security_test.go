@@ -50,10 +50,18 @@ func paginasRenderizadas(t *testing.T, router http.Handler) map[string]*httptest
 		"GET /api/v1/entitlements": {http.StatusOK, entitlementsBody("commerce", "catalog_import", "menu")},
 		"GET /api/v1/members":      {http.StatusOK, membersBody(testUserID, testOtherUserID)},
 		"GET /api/v1/roles":        {http.StatusOK, rolesBody},
+		// La pantalla de sesiones se pinta ENTERA —con su tabla, sus chips y su formulario—, que es
+		// donde se colaría un `style=` o un `<script>`. Con el listado vacío no se vería ninguna de
+		// las tres cosas.
+		"GET /api/v1/sessions": {http.StatusOK, sesionesBody(
+			`{"session_id":"` + testSessionID + `","edge_id":"edge-alpha","state":"online",` +
+				`"profile":"active","self_pn":"+593990000001",` +
+				`"intent_circuit":"open","worker_taskset":"solapada"}`)},
 	})
 	routerAdmin := adminRouter(api)
 	for nombre, ruta := range map[string]string{
 		"home_con_plan":    "/",
+		"sesiones":         "/sesiones",
 		"miembros":         "/miembros",
 		"roles":            "/roles",
 		"mi_identificador": "/mi-identificador",
@@ -76,6 +84,7 @@ func paginasRenderizadas(t *testing.T, router http.Handler) map[string]*httptest
 	sinTenant := sessionCookieFor(t, testUserID, "")
 	for nombre, ruta := range map[string]string{
 		"home_sin_empresa":             "/",
+		"sesiones_sin_empresa":         "/sesiones",
 		"miembros_sin_empresa":         "/miembros",
 		"roles_sin_empresa":            "/roles",
 		"mi_identificador_sin_empresa": "/mi-identificador",
@@ -109,7 +118,9 @@ func TestPaginas_TodasLasPantallasAutenticadasEstanCubiertas(t *testing.T) {
 		rutasGET[ruta.Path] = true
 	}
 
-	cubiertas := map[string]bool{"/": true, "/miembros": true, "/roles": true, "/mi-identificador": true}
+	cubiertas := map[string]bool{
+		"/": true, "/sesiones": true, "/miembros": true, "/roles": true, "/mi-identificador": true,
+	}
 	for ruta := range rutasGET {
 		if !cubiertas[ruta] {
 			t.Errorf("la pantalla %q no está en paginasRenderizadas: los tests de CSP no la miran", ruta)

@@ -143,16 +143,88 @@ func TestFlash_ElTextoDel404NoDiceQueNoExiste(t *testing.T) {
 func TestFlash_TodosLosCodigosDeLasPantallasTienenTexto(t *testing.T) {
 	t.Parallel()
 
-	for _, code := range []string{flashSessionExpired, flashSelfRemoval, flashMissingField, flashAddedWithoutRole} {
+	for _, code := range []string{flashSessionExpired, flashSelfRemoval, flashMissingField, flashAddedWithoutRole,
+		flashSessionNotYours, flashInvalidProfile, flashSessionOffline, flashSendTimeout, flashSendNotDelivered} {
 		if !flashErrors.Known(code) {
 			t.Errorf("el código de error %q no tiene texto", code)
 		}
 	}
 	for _, code := range []string{flashLoggedOut, flashMemberAdded, flashMemberRemoved, flashRoleCreated,
-		flashRoleAssigned, flashRoleRemoved} {
+		flashRoleAssigned, flashRoleRemoved, flashMessageSent, flashProfileActive, flashProfilePassive} {
 		if !flashSuccesses.Known(code) {
 			t.Errorf("el código de éxito %q no tiene texto", code)
 		}
+	}
+}
+
+// TestFlash_ElPlanoDeSesionesConservaSusTresSignificados.
+//
+// flashCodeForSessions existe porque el traductor GENÉRICO se comería tres desenlaces que en esta
+// pantalla sí significan algo, y los tres fallos serían silenciosos: todo seguiría verde y el usuario
+// leería un texto que no le sirve. Cada caso va con su GEMELO —lo que el genérico habría dicho— para
+// que el test se caiga si alguien «simplifica» el traductor.
+func TestFlash_ElPlanoDeSesionesConservaSusTresSignificados(t *testing.T) {
+	t.Parallel()
+
+	// 502: el teléfono está desconectado. El genérico lo llamaría «no se pudo completar».
+	offline := &apiclient.APIError{Op: "messages.send", StatusCode: http.StatusBadGateway}
+	if got := flashCodeForSessions(offline); got != flashSessionOffline {
+		t.Errorf("el 502 dio %q, want %q", got, flashSessionOffline)
+	}
+	if got := flashCodeFor(offline); got == flashSessionOffline {
+		t.Error("el traductor genérico ya distingue el 502: este test dejó de probar nada")
+	}
+
+	// 504: el acuse no llegó a tiempo, que NO es «no se envió».
+	timeout := &apiclient.APIError{Op: "messages.send", StatusCode: http.StatusGatewayTimeout}
+	if got := flashCodeForSessions(timeout); got != flashSendTimeout {
+		t.Errorf("el 504 dio %q, want %q", got, flashSendTimeout)
+	}
+	if got := flashCodeFor(timeout); got == flashSendTimeout {
+		t.Error("el traductor genérico ya distingue el 504: este test dejó de probar nada")
+	}
+
+	// 404: frontera de empresa, con el sustantivo de ESTA pantalla. El genérico habla de roles.
+	notFound := fmt.Errorf("sessions.list: %w", apiclient.ErrNotFound)
+	if got := flashCodeForSessions(notFound); got != flashSessionNotYours {
+		t.Errorf("el 404 de sesiones dio %q, want %q", got, flashSessionNotYours)
+	}
+	if got := flashCodeFor(notFound); got != flashNotInYourTenant {
+		t.Errorf("el genérico dejó de traducir el 404 a %q: dio %q", flashNotInYourTenant, got)
+	}
+
+	// Y el resto sigue cayendo por el genérico: un traductor propio que no delegara sería una tabla
+	// paralela que se desincroniza.
+	for _, caso := range []struct {
+		err  error
+		want string
+	}{
+		{fmt.Errorf("x: %w", apiclient.ErrForbidden), flashForbidden},
+		{fmt.Errorf("x: %w", apiclient.ErrInvalidInput), flashInvalidInput},
+		{fmt.Errorf("x: %w", apiclient.ErrUnauthorized), flashSessionExpired},
+		{errors.New("fallo de red"), flashUpstreamUnavailable},
+		{nil, ""},
+	} {
+		if got := flashCodeForSessions(caso.err); got != caso.want {
+			t.Errorf("flashCodeForSessions(%v) = %q, want %q", caso.err, got, caso.want)
+		}
+	}
+}
+
+// TestFlash_ElAvisoDel504NoMandaAReintentarSinComprobar.
+//
+// Un 504 del envío NO significa «no se envió»: la nube ya empujó el comando al equipo y lo que expiró
+// es la espera del acuse. El texto del BFF decía «Inténtalo de nuevo», y repetir un envío que quizá
+// salió le manda el mensaje DOS VECES a un cliente real. Este test fija el texto por su efecto.
+func TestFlash_ElAvisoDel504NoMandaAReintentarSinComprobar(t *testing.T) {
+	t.Parallel()
+
+	texto := flashError(flashSendTimeout)
+	if !strings.Contains(texto, "no se sabe si el mensaje salió") {
+		t.Error("el aviso del 504 tiene que decir que el desenlace es DESCONOCIDO, no que falló")
+	}
+	if !strings.Contains(texto, "ANTES de repetirlo") {
+		t.Error("el aviso del 504 tiene que mandar a comprobar antes de reintentar")
 	}
 }
 

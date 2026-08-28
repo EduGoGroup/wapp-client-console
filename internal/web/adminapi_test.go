@@ -143,6 +143,22 @@ func membersBody(userIDs ...string) string {
 	return "[" + strings.Join(filas, ",") + "]"
 }
 
+// sesionesBody arma la respuesta de GET /api/v1/sessions a partir de filas ya escritas en JSON, para
+// que cada test enseñe EXACTAMENTE los campos que le importan.
+//
+// No hay constructor con parámetros a propósito: media docena de criterios de esta pantalla son sobre
+// campos AUSENTES —un `profile` que no viene, un `intent_circuit` que el equipo no reporta—, y una
+// firma con parámetros obliga a mandar el cero de cada uno, que es justo lo contrario de ausente.
+func sesionesBody(filas ...string) string {
+	return "[" + strings.Join(filas, ",") + "]"
+}
+
+// Identificadores de las sesiones de prueba.
+const (
+	testSessionID    = "s-1111"
+	testOtherSession = "s-2222"
+)
+
 // entitlementsBody arma la respuesta de GET /api/v1/entitlements.
 func entitlementsBody(plan string, features ...string) string {
 	quoted := make([]string, 0, len(features))

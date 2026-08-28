@@ -2,6 +2,7 @@ package web
 
 import (
 	"errors"
+	"net/http"
 
 	sharedweb "github.com/EduGoGroup/wapp-shared/web"
 
@@ -60,11 +61,48 @@ const (
 	// como éxito dejaría a alguien dentro de la empresa y sin permisos, creyendo que los tiene.
 	flashAddedWithoutRole = "added_without_role"
 
+	// --- Desenlaces de la pantalla de sesiones (T2.1) ---
+
+	// flashSessionNotYours traduce el 404 del plano de SESIONES.
+	//
+	// Es el mismo 404 con frontera de tenant que flashNotInYourTenant, pero con el sustantivo de esta
+	// pantalla: el texto genérico habla de roles y aquí no hay ninguno. Conserva la ambigüedad —«no
+	// es tuya o no existe»— porque distinguir las dos cosas confirmaría que ese identificador existe
+	// en algún sitio, que es justo lo que el 404 de la plataforma evita.
+	flashSessionNotYours = "session_not_yours"
+	// flashInvalidProfile lo emite el formulario de perfil ante un valor que no es activa ni pasiva,
+	// la cadena vacía incluida (el `value` del <option> «sin dato»). No sale a la red.
+	flashInvalidProfile = "invalid_profile"
+	// flashSessionOffline traduce el 502 del envío: el teléfono existe y está desconectado. Es el
+	// desenlace más frecuente del envío y el más accionable, así que NO puede caer al genérico.
+	flashSessionOffline = "session_offline"
+	// flashSendTimeout traduce el 504 del envío: el acuse del Edge no llegó a tiempo.
+	//
+	// 🔴 NO significa «no se envió». La nube ya empujó el comando; lo que expiró es la espera del
+	// acuse. Por eso el texto NO dice «inténtalo de nuevo» a secas —repetir puede mandar el mensaje
+	// DOS VECES a un cliente real—: dice que se compruebe antes.
+	flashSendTimeout = "send_timeout"
+	// flashSendNotDelivered es el `ok:false` de un 200: el Edge recibió el comando y no pudo
+	// ejecutarlo. Es un DESENLACE A MEDIAS y por eso vive entre los errores: pintarlo como éxito le
+	// diría a la dueña que el mensaje salió cuando no salió.
+	flashSendNotDelivered = "send_not_delivered"
+
 	flashMemberAdded   = "member_added"
 	flashMemberRemoved = "member_removed"
 	flashRoleCreated   = "role_created"
 	flashRoleAssigned  = "role_assigned"
 	flashRoleRemoved   = "role_removed"
+
+	// flashMessageSent es el acuse del Edge: el comando se aceptó. El identificador del comando NO va
+	// en el texto —el catálogo traduce códigos, no interpola datos—; viaja aparte y la pantalla lo
+	// pinta como chip (ver ackSeguro en sessions_handler.go).
+	flashMessageSent = "message_sent"
+	// Los DOS éxitos del cambio de perfil, uno por perfil, y no uno solo con el nombre interpolado:
+	// el catálogo es código→texto fijo, y meter el valor en el mensaje obligaría a construirlo fuera
+	// de la tabla — que es justo por donde entra un texto sin traducir o, peor, uno que venga del
+	// query string. Además cada perfil tiene una consecuencia distinta que contar.
+	flashProfileActive  = "profile_active"
+	flashProfilePassive = "profile_passive"
 )
 
 var (
@@ -84,6 +122,15 @@ var (
 		flashUpstreamUnavailable: "No se pudo completar la operación ahora mismo. Inténtalo de nuevo en un momento.",
 		flashSelfRemoval:         "No puedes darte de baja a ti mismo: te quedarías sin acceso a esta consola.",
 		flashMissingField:        "Faltan datos: completa el formulario antes de enviarlo.",
+		flashSessionNotYours: "Esa sesión no es de tu empresa, o ya no existe. La plataforma no dice cuál de las dos " +
+			"cosas es, a propósito: elige una del listado.",
+		flashInvalidProfile: "Elige un perfil válido para la sesión: activa o pasiva.",
+		flashSessionOffline: "El teléfono de esa sesión está desconectado ahora mismo. Inténtalo cuando vuelva a " +
+			"estar en línea.",
+		flashSendTimeout: "El acuse del equipo no llegó a tiempo, así que no se sabe si el mensaje salió. " +
+			"Compruébalo en el teléfono ANTES de repetirlo: volver a enviarlo puede duplicarlo.",
+		flashSendNotDelivered: "El equipo recibió el mensaje pero no pudo entregarlo. Revisa el número de destino " +
+			"e inténtalo de nuevo.",
 	})
 
 	flashSuccesses = sharedweb.NewFlashCatalog("Acción completada.", map[string]string{
@@ -94,6 +141,10 @@ var (
 		flashRoleCreated:   "Rol creado.",
 		flashRoleAssigned:  "Rol asignado.",
 		flashRoleRemoved:   "Rol retirado.",
+		flashMessageSent:   "El equipo aceptó el mensaje y lo está enviando.",
+		flashProfileActive: "Perfil cambiado a ACTIVA: esa sesión vuelve a conversar sola y contesta por su cuenta.",
+		flashProfilePassive: "Perfil cambiado a PASIVA: esa sesión solo envía. Lo que le escriban se descarta en tu " +
+			"equipo y no sube a la nube.",
 	})
 )
 
@@ -137,4 +188,33 @@ func flashCodeFor(err error) string {
 	default:
 		return flashUpstreamUnavailable
 	}
+}
+
+// flashCodeForSessions es el traductor del plano de SESIONES, y existe por lo mismo que
+// memberStatusError en el apiclient: hay desenlaces cuyo SIGNIFICADO es propio de este plano y que el
+// traductor general se comería.
+//
+// Son tres, y los tres son accionables por quien mira la pantalla:
+//   - 502 · el teléfono está desconectado. En el genérico sería «no se pudo completar la operación»,
+//     que manda a reintentar contra una sesión que va a fallar igual hasta que vuelva a estar en línea.
+//   - 504 · el acuse no llegó a tiempo, que NO es «no se envió» (ver flashSendTimeout).
+//   - 404 · frontera de empresa, con el sustantivo de esta pantalla en vez del genérico, que habla de
+//     roles.
+//
+// 🔴 El ORDEN importa, y por el mismo motivo que en flashCodeFor: los dos primeros se reconocen por
+// STATUS (llegan como *APIError, sin sentinela) y el tercero por sentinela. StatusCodeOf devuelve 0
+// para los sentinelas, así que un 404 nunca entra por el switch de arriba; al revés no se cumple —si
+// la rama de ErrNotFound fuera antes, seguiría funcionando—, pero se leen mejor en el orden en que la
+// petición los produce.
+func flashCodeForSessions(err error) string {
+	switch apiclient.StatusCodeOf(err) {
+	case http.StatusBadGateway:
+		return flashSessionOffline
+	case http.StatusGatewayTimeout:
+		return flashSendTimeout
+	}
+	if errors.Is(err, apiclient.ErrNotFound) {
+		return flashSessionNotYours
+	}
+	return flashCodeFor(err)
 }

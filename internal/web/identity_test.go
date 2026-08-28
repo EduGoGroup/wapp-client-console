@@ -208,15 +208,17 @@ func TestSinEmpresa_LaNavegacionOfreceSoloLoQueSePuedeUsar(t *testing.T) {
 	conEmpresa := getWithSession(t, router, "/").Body.String()
 	sinEmpresaHTML := getConCookie(router, "/", sessionCookieFor(t, testUserID, "")).Body.String()
 
-	// Positivo: con empresa, la barra ofrece las tres.
-	for _, enlace := range []string{`href="/miembros"`, `href="/roles"`, `href="/mi-identificador"`} {
+	// Positivo: con empresa, la barra ofrece las cuatro.
+	for _, enlace := range []string{`href="/sesiones"`, `href="/miembros"`, `href="/roles"`, `href="/mi-identificador"`} {
 		if !strings.Contains(conEmpresa, enlace) {
 			t.Fatalf("con empresa la barra no ofrece %s: el negativo de abajo sería vacuo", enlace)
 		}
 	}
 	// Negativo: sin empresa, solo la que se puede usar.
-	if strings.Contains(sinEmpresaHTML, `href="/miembros"`) || strings.Contains(sinEmpresaHTML, `href="/roles"`) {
-		t.Error("la barra ofrece administrar a una sesión sin empresa")
+	for _, enlace := range []string{`href="/sesiones"`, `href="/miembros"`, `href="/roles"`} {
+		if strings.Contains(sinEmpresaHTML, enlace) {
+			t.Errorf("la barra ofrece %s a una sesión sin empresa", enlace)
+		}
 	}
 	if !strings.Contains(sinEmpresaHTML, `href="/mi-identificador"`) {
 		t.Error("la barra no ofrece «Mi identificador» a quien no tiene empresa: es lo único que puede usar")

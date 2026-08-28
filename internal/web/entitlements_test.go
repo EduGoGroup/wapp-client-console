@@ -92,6 +92,7 @@ func TestPlanGate_ElPlanoDeRolesYMiembrosNoEstaGateado(t *testing.T) {
 		"GET /api/v1/entitlements": {http.StatusOK, entitlementsBody("basic")},
 		"GET /api/v1/members":      {http.StatusOK, membersBody(testUserID)},
 		"GET /api/v1/roles":        {http.StatusOK, rolesBody},
+		"GET /api/v1/sessions":     {http.StatusOK, sesionesBody()},
 	})
 	router := adminRouter(api)
 
@@ -99,8 +100,13 @@ func TestPlanGate_ElPlanoDeRolesYMiembrosNoEstaGateado(t *testing.T) {
 	if !strings.Contains(out, `href="/miembros"`) || !strings.Contains(out, `href="/roles"`) {
 		t.Error("sin ninguna feature, la portada dejó de ofrecer la administración de personas y permisos")
 	}
+	// La pantalla de SESIONES es capacidad base por el mismo motivo, y además es la que enseña la
+	// flota de la empresa: gatearla dejaría a un tenant sin ver sus propios teléfonos.
+	if !strings.Contains(out, `href="/sesiones"`) {
+		t.Error("sin ninguna feature, la portada dejó de ofrecer las sesiones vinculadas")
+	}
 	// Y las pantallas responden, no solo el enlace.
-	for _, ruta := range []string{"/miembros", "/roles"} {
+	for _, ruta := range []string{"/sesiones", "/miembros", "/roles"} {
 		if rec := getWithSession(t, router, ruta); rec.Code != http.StatusOK {
 			t.Errorf("GET %s con un plan sin features status = %d, want 200", ruta, rec.Code)
 		}
