@@ -1,0 +1,100 @@
+{{ define "home.html" }}
+<section class="page-narrow">
+    {{ if .SinEmpresa }}
+    {{ template "sin_empresa" . }}
+    {{ else }}
+    <div class="wapp-card">
+        <h1 class="wapp-title">Administración de tu empresa</h1>
+        <p class="wapp-subtitle">
+            Desde aquí gobiernas quién entra a tu empresa en wApp y qué puede hacer cada persona.
+        </p>
+
+        {{ template "flashes" . }}
+
+        <dl class="session-facts">
+            <dt class="session-facts__term">Empresa</dt>
+            <dd class="session-facts__value" id="tenant-actual">{{ .TenantID }}</dd>
+
+            <dt class="session-facts__term">Usuario</dt>
+            <dd class="session-facts__value">{{ .UserID }}</dd>
+        </dl>
+    </div>
+
+    <div class="wapp-card card-stacked" id="section-sesiones">
+        <h2 class="section-title">Tus teléfonos</h2>
+        <p class="section-note">
+            Ver tus sesiones de WhatsApp y decidir cuáles conversan solas también es capacidad base.
+        </p>
+        <ul class="link-list">
+            <li class="link-list__item">
+                <a class="link-list__link" href="/sesiones">Sesiones vinculadas</a>
+                <span class="link-list__hint">
+                    Qué teléfonos están en línea, si el clasificador está sano, cuáles conversan solas
+                    y cuáles solo envían. Desde ahí también se manda un mensaje de prueba.
+                </span>
+            </li>
+        </ul>
+    </div>
+
+    <div class="wapp-card card-stacked" id="section-administracion">
+        <h2 class="section-title">Personas y permisos</h2>
+        <p class="section-note">
+            Administrar a tu equipo es capacidad base: está disponible con cualquier plan.
+        </p>
+        <ul class="link-list">
+            <li class="link-list__item">
+                <a class="link-list__link" href="/miembros">Miembros de tu empresa</a>
+                <span class="link-list__hint">Quién pertenece a la empresa y quién deja de pertenecer.</span>
+            </li>
+            <li class="link-list__item">
+                <a class="link-list__link" href="/roles">Roles y asignaciones</a>
+                <span class="link-list__hint">El catálogo de roles y qué rol lleva cada persona.</span>
+            </li>
+        </ul>
+    </div>
+
+    <div class="wapp-card card-stacked" id="section-plan">
+        <h2 class="section-title">Tu plan</h2>
+        {{ if $.Entitlements.Resolved }}
+        <p class="section-note">
+            Plan contratado: <span class="chip chip--info">{{ $.Entitlements.Plan }}</span>
+        </p>
+        {{ if $.Entitlements.Features }}
+        <ul class="chip-list">
+            {{ range $.Entitlements.Features }}
+            <li class="chip chip--ok">{{ . }}</li>
+            {{ end }}
+        </ul>
+        {{ else }}
+        <p class="section-note">Tu plan no tiene ninguna capacidad activa todavía.</p>
+        {{ end }}
+        {{ else }}
+        <div class="wapp-snackbar wapp-snackbar--error" role="alert">{{ $.Entitlements.Notice }}</div>
+        {{ end }}
+    </div>
+
+    {{/*
+    Gate por plan (T1.5 · D-040.6). El bloque NO SE EMITE si la empresa no tiene la capacidad: no se
+    esconde con CSS ni con JS. Lo que no está contratado no está en el HTML, así que no hay nada que
+    destapar con el inspector — y la CSP endurecida no admitiría el JS que haría falta para ocultarlo.
+
+    🔴 Ojo con "gatear todo lo que se pueda": el plano de roles y miembros de arriba es CAPACIDAD BASE
+    y NO va detrás de ninguna feature (D-047.10). Aquí se gatea `catalog_import`, que sí depende del
+    paquete comercial: `basic` no la trae y `commerce` en adelante sí.
+    */}}
+    {{ if $.Entitlements.Has "catalog_import" }}
+    <div class="wapp-card card-stacked" id="section-catalog-import">
+        <h2 class="section-title">Importar catálogo</h2>
+        <p class="section-note">
+            Tu plan incluye la carga masiva del catálogo de productos: precios, unidades y
+            equivalencias en un solo fichero, sin teclearlos uno a uno.
+        </p>
+        <p class="section-note">
+            La pantalla de carga llega en la tanda siguiente de esta consola. Hasta entonces, la
+            capacidad ya está activa en tu empresa.
+        </p>
+    </div>
+    {{ end }}
+    {{ end }}
+</section>
+{{ end }}

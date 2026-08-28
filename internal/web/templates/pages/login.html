@@ -1,0 +1,46 @@
+{{ define "login.html" }}
+<section class="wapp-auth-container">
+    <div class="wapp-card wapp-login-card">
+        <div class="wapp-login-header">
+            <div class="wapp-brand-badge">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">{{ template "brand_mark" }}</svg>
+            </div>
+            <h1 class="wapp-title">wApp</h1>
+            <p class="wapp-subtitle">Consola de administración de tu empresa</p>
+        </div>
+
+        {{ if .Success }}
+        <div class="wapp-snackbar wapp-snackbar--success" role="status">
+            {{ .Success }}
+        </div>
+        {{ end }}
+
+        {{ if .Error }}
+        <div class="wapp-snackbar wapp-snackbar--error" role="alert">
+            {{ .Error }}
+        </div>
+        {{ end }}
+
+        <form id="login-form" method="POST" action="/login" class="wapp-form-stack" autocomplete="on">
+            <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="login-email">Correo</label>
+                <input class="wapp-field__control" type="email" id="login-email" name="email"
+                       value="{{ .Email }}"
+                       autocomplete="username" required autofocus placeholder="tu@empresa.com">
+            </div>
+
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="login-password">Contraseña</label>
+                <input class="wapp-field__control" type="password" id="login-password" name="password"
+                       autocomplete="current-password" required placeholder="••••••••">
+            </div>
+
+            <div class="wapp-actions">
+                <button type="submit" id="login-submit" class="wapp-btn wapp-btn--filled">Entrar</button>
+            </div>
+        </form>
+    </div>
+</section>
+{{ end }}

@@ -15,7 +15,7 @@ No es la consola de plataforma. En wApp hay **dos perímetros distintos** y no c
 | Quién la usa | el **cliente** (admin del tenant) | los **operadores de plataforma** (nosotros) |
 | Puerto | `127.0.0.1:8107` | `127.0.0.1:8106` |
 | Plano que consume | API **pública** `:8103` (Context Token, filtrado por tenant) | listener **admin** `:8100` |
-| `system` ante identity | el del perímetro del cliente | `wapp.platform` |
+| `system` ante identity | `wapp.bff` (el mismo que el BFF: mismo perímetro) | `wapp.platform` |
 | Cookies | `wapp_client_session` / `wapp_client_csrf` | `wapp_platform_session` / `wapp_platform_csrf` |
 
 🔴 **Esta consola no declara `WAPP_ADMIN_API_BASE`, y es deliberado.** El plano admin (`:8100`) es
@@ -26,11 +26,28 @@ plataforma. No basta con "no usarla": una variable declarada es una invitación 
 
 ## Estado
 
-**Andamiaje.** Hoy el repo tiene infraestructura y gates, no funcionalidad: la cadena de middleware
-endurecida, la configuración, el arranque con apagado ordenado y `GET /healthz`. **No hay login ni
-pantallas todavía** — eso llega en la tanda siguiente del Plan 047.
+**Login.** Sobre el andamiaje —cadena de middleware endurecida, configuración, arranque con apagado
+ordenado y `GET /healthz`— vive ya el ciclo de sesión completo: `GET/POST /login`, `POST /logout`,
+el `AuthMiddleware` con refresco proactivo y una pantalla autenticada mínima (`/`) que muestra la
+empresa y el usuario de la sesión. **Las pantallas de negocio —miembros, roles, bandeja— todavía no
+están**: llegan en la tanda siguiente del Plan 047, y por eso este repo aún no tiene ningún cliente
+HTTP de la API pública más allá del canje.
 
-Lo que sí está resuelto desde el primer commit son los **nombres de cookie**. En
+Dos cosas del login conviene saberlas antes de tocarlo:
+
+- **El `system` ante identity es `wapp.bff`**, el mismo que usa el BFF del cliente, porque es el
+  mismo perímetro. No se estrena una clave propia: el canje de la plataforma solo acepta tres
+  systems, identity-core no expone endpoint para dar de alta uno nuevo, y `ReplaceUserSystems` es
+  declarativo (revoca lo que no se le manda), así que estrenar una obligaría a re-acreditar a cada
+  usuario de cliente que ya existe. Está declarado en `internal/web/server.go` con ese porqué.
+- **El 401 de credenciales y el 403 del System Gate dan el MISMO texto en pantalla** —no se le dice
+  a un desconocido si un correo existe— pero **causas DISTINTAS en el log**, que es entonces el
+  único sitio donde vive esa diferencia. En la consola de plataforma esto estaba prometido en un
+  comentario y cumplido solo para una de las dos ramas, y el 2026-08-28 costó una tarde de
+  diagnóstico a ciegas. Aquí lo vigilan dos tests emparejados (`auth_test.go`), y ninguno de los dos
+  deja que el correo entre en el log.
+
+Lo que estaba resuelto desde el primer commit son los **nombres de cookie**. En
 `wapp-shared/web` el nombre es un **parámetro**, no una constante: sus defaults (`wapp_session` /
 `wapp_csrf`) son los del BFF del cliente, y un consumidor que no los parametrice los **hereda en
 silencio y compila igual**. Somos el tercer consumidor. `internal/web/session.go` fija

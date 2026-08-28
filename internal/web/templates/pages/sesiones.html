@@ -1,0 +1,180 @@
+{{ define "sesiones.html" }}
+<section class="page-wide">
+    {{ if .SinEmpresa }}
+    {{ template "sin_empresa" . }}
+    {{ else }}
+    <div class="wapp-card">
+        <h1 class="wapp-title">Sesiones vinculadas</h1>
+        <p class="wapp-subtitle">
+            Los teléfonos de tu empresa en wApp, su estado y su perfil. El emparejamiento de un
+            teléfono nuevo se hace en tu propio equipo, no desde aquí.
+        </p>
+
+        {{ template "flashes" . }}
+
+        {{/*
+        El acuse del equipo. Es un identificador OPACO —el hilo que correlaciona lo que la nube
+        intentó con la cola de salida del equipo—, no un texto, y por eso es lo único de esta consola
+        que llega por el query string y se pinta. Viene filtrado por ackSeguro en los dos extremos.
+        */}}
+        {{ if .Ack }}
+        <p class="section-note" id="acuse-envio">
+            Identificador del envío: <code class="mono" id="chip-ack">{{ .Ack }}</code>
+        </p>
+        {{ end }}
+
+        {{/*
+        🔴 ESTE PÁRRAFO NO ES EL DEL BFF, y no se «perdió» al portar: se reescribió porque el del BFF
+        dejó de ser verdad.
+
+        Aquel decía que el descarte de los entrantes en el equipo «todavía no está disponible» y que
+        «lo que le escriban a esa sesión sigue llegando a la nube». Eso era cierto hasta la Ola 2 del
+        Plan 046; hoy el Edge corta el entrante de una sesión pasiva en la puerta del listener —no se
+        encola, no se persiste y no se entrega—, el plan está cerrado y desplegado, y su propio
+        comentario en el BFF decía «QUÍTALA CUANDO LA OLA 2 DEL PLAN 046 ESTÉ EN CAMPO».
+
+        Lo que se conserva intacto es su SENTIDO, que es lo que importaba: no prometer una privacidad
+        que no se entrega. Por eso el texto dice exactamente lo que hoy se cumple y añade el matiz que
+        sigue siendo verdad — el perfil viaja al equipo como configuración, así que hay un instante
+        entre el clic y el corte.
+        */}}
+        {{/*
+        ⚠️ Los saltos de línea de este párrafo NO son libres: hay asertos que buscan sus frases
+        enteras, y una frase partida por el sangrado deja de encontrarse aunque el navegador la pinte
+        igual. Si lo reescribes, ejecuta TestSesiones_NoPrometeMasPrivacidadDeLaQueSeEntrega.
+        */}}
+        <p class="section-note" id="nota-perfiles">
+            Una sesión <strong>activa</strong> conversa sola: contesta por su cuenta a quien le
+            escribe. Una sesión <strong>pasiva</strong> solo envía — nunca contesta sola — y lo que le
+            escriban <strong>se descarta en tu propio equipo</strong>:
+            no se encola, no se guarda y no sube a la nube.
+            El cambio de perfil viaja a tu equipo como configuración:
+            hasta que llega, la sesión sigue comportándose como estaba.
+        </p>
+    </div>
+
+    <div class="wapp-card card-stacked" id="section-listado">
+        {{ if .SessionsError }}
+        <p class="section-note" id="sessions-degradado">
+            No se pudo leer el listado de sesiones ahora mismo. Puedes enviar un mensaje igualmente si
+            sabes el identificador de la sesión: el formulario de abajo lo pide a mano.
+        </p>
+        {{ else if .Sessions }}
+        <table class="data-table" id="table-sessions">
+            <caption class="data-table__caption">Teléfonos vinculados a esta empresa</caption>
+            <thead>
+                <tr>
+                    <th scope="col">Teléfono / sesión</th>
+                    <th scope="col">Equipo</th>
+                    <th scope="col">Estado</th>
+                    <th scope="col">Clasificador</th>
+                    <th scope="col">Perfil</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{ range .Sessions }}
+                <tr>
+                    <td><code class="mono" title="{{ .SessionID }}">{{ .Label }}</code></td>
+                    <td class="mono">{{ .EdgeID }}</td>
+                    <td><span class="chip {{ .Estado.Class }}" title="{{ .Estado.Title }}">{{ .Estado.Text }}</span></td>
+                    <td>
+                        {{/*
+                        Los dos chips de salud del clasificador. El tooltip del reparto de CPU avisa de
+                        que su veredicto es del ARRANQUE del cajero y no se recalcula; el del breaker
+                        no lo lleva, porque ese sí es continuo. Ver avisoCPUDelArranque.
+                        */}}
+                        <span class="chip {{ .Circuito.Class }}" title="{{ .Circuito.Title }}">{{ .Circuito.Text }}</span>
+                        <span class="chip {{ .CPU.Class }}" title="{{ .CPU.Title }}">{{ .CPU.Text }}</span>
+                    </td>
+                    <td>
+                        {{/*
+                        PERFIL de sesión (ADR-0027). El `value` va en inglés porque es el identificador
+                        que viaja por el cable a POST /api/v1/sessions/{id}/profile; el texto que se ve
+                        va en castellano porque es el vocabulario de la dueña. Que los dos no coincidan
+                        es deliberado, no un despiste de traducción.
+
+                        🔴 El <option> de «sin dato» NO es adorno. `.Profile` sale de EffectiveProfile,
+                        que devuelve "" cuando la plataforma no dijo un perfil utilizable, y un <select>
+                        SIN ninguna opción `selected` NO se pinta vacío: el navegador enseña la PRIMERA,
+                        que aquí sería «activa». Sin este placeholder, un perfil DESCONOCIDO se leería
+                        como «esta sesión conversa sola» y un clic en «Aplicar» la activaría de verdad.
+                        Va `disabled` para que no se pueda elegir a mano, y su `value=""` lo rebota
+                        SetSessionProfile antes de salir a la red: ante la duda no se activa nada.
+                        */}}
+                        <form method="POST" action="/sesiones/{{ .SessionID }}/perfil" class="inline-form" autocomplete="off">
+                            <input type="hidden" name="csrf_token" value="{{ $.CSRFToken }}">
+                            <label class="wapp-field__label" for="profile-{{ .SessionID }}" hidden>Perfil de {{ .Label }}</label>
+                            <select class="wapp-field__control" id="profile-{{ .SessionID }}" name="profile">
+                                {{ if eq .Profile "" }}<option value="" selected disabled>— sin dato —</option>{{ end }}
+                                <option value="active" {{ if eq .Profile "active" }}selected{{ end }}>activa</option>
+                                <option value="passive" {{ if eq .Profile "passive" }}selected{{ end }}>pasiva</option>
+                            </select>
+                            <button type="submit" class="btn btn--primary">Aplicar</button>
+                        </form>
+                    </td>
+                </tr>
+                {{ end }}
+            </tbody>
+        </table>
+        {{ else }}
+        <p class="empty-state" id="sessions-vacio">
+            Esta empresa todavía no tiene teléfonos vinculados. El emparejamiento se hace en tu propio
+            equipo, contra el agente de wApp que corre allí.
+        </p>
+        {{ end }}
+    </div>
+
+    <div class="wapp-card card-stacked" id="section-enviar">
+        <h2 class="section-title">Enviar un mensaje de prueba</h2>
+        <p class="section-note" id="nota-envio">
+            Elige la sesión de salida, el número de destino y el texto. Lo que se confirma es que tu
+            equipo aceptó el mensaje; la entrega la hace él.
+        </p>
+
+        <form method="POST" action="/sesiones/enviar" class="stack-form" id="form-enviar" autocomplete="off">
+            <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="session_id">Sesión de salida</label>
+                {{/*
+                Sin listado no se pinta un desplegable vacío —parecería un fallo del formulario—: se
+                pide el identificador a mano, que es lo único que se puede hacer cuando el catálogo no
+                se pudo leer, y es justo cuando alguien necesita enviar algo.
+                */}}
+                {{ if and (not .SessionsError) .Sessions }}
+                <select class="wapp-field__control" id="session_id" name="session_id" required>
+                    <option value="" selected disabled>Elige una sesión…</option>
+                    {{ range .Sessions }}
+                    <option value="{{ .SessionID }}">{{ .Label }} · {{ .EdgeID }} ({{ .Estado.Text }})</option>
+                    {{ end }}
+                </select>
+                {{ else }}
+                <input class="wapp-field__control mono" type="text" id="session_id" name="session_id"
+                       required maxlength="128" placeholder="identificador de sesión">
+                {{ end }}
+            </div>
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="to">Número de destino</label>
+                <input class="wapp-field__control mono" type="text" id="to" name="to"
+                       required maxlength="32" placeholder="+593 99 000 0000">
+            </div>
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="text">Mensaje</label>
+                <textarea class="wapp-field__control" id="text" name="text" required
+                          maxlength="4096" placeholder="Escribe el texto a enviar…"></textarea>
+            </div>
+            <div class="wapp-actions">
+                <button type="submit" class="btn btn--primary">Enviar</button>
+            </div>
+        </form>
+
+        {{/*
+        El formulario NO se rellena de vuelta tras un fallo, y es consecuencia del patrón de esta
+        consola: las mutaciones van POST-redirect-GET (un F5 no repite el envío) y lo escrito no
+        sobrevive al redirect. Devolverlo por el query string metería el texto del mensaje y el número
+        de destino en la URL —en el historial del navegador y en cualquier log de por medio—, que es
+        precisamente lo que esta consola no hace con datos de terceros.
+        */}}
+    </div>
+    {{ end }}
+</section>
+{{ end }}

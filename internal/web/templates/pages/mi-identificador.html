@@ -1,0 +1,38 @@
+{{ define "mi-identificador.html" }}
+<section class="page-narrow">
+    <div class="wapp-card">
+        <h1 class="wapp-title">Mi identificador</h1>
+        <p class="wapp-subtitle">
+            Este es tu identificador en wApp. Dáselo a quien administra tu empresa para que te dé
+            acceso.
+        </p>
+
+        {{/*
+        El valor va ENTERO en un campo de solo lectura, sin abreviar y sin partir: es el elemento
+        pensado para copiarse —en el móvil, mantener pulsado ofrece «Seleccionar todo» y «Copiar»— y
+        un identificador copiado a medias no sirve para nada.
+
+        No hay botón de «copiar», y es a propósito: el portapapeles solo se toca con JavaScript, esta
+        consola no sirve ni una línea de JS y su CSP no lleva 'unsafe-inline', así que un botón así o
+        no funcionaría o obligaría a abrir la política. Un campo seleccionable basta.
+        */}}
+        <div class="wapp-field">
+            <label class="wapp-field__label" for="mi-identificador-valor">Tu identificador</label>
+            <input class="wapp-field__control copy-field" type="text" id="mi-identificador-valor"
+                   value="{{ .UserID }}" readonly autocomplete="off" spellcheck="false">
+        </div>
+
+        {{ if .SinEmpresa }}
+        <p class="section-note" id="nota-sin-empresa">
+            Todavía no perteneces a ninguna empresa. En cuanto quien la administra te dé acceso con
+            este identificador, verás aquí tu negocio.
+        </p>
+        {{ else }}
+        <dl class="session-facts">
+            <dt class="session-facts__term">Tu empresa</dt>
+            <dd class="session-facts__value" id="tenant-actual">{{ .TenantID }}</dd>
+        </dl>
+        {{ end }}
+    </div>
+</section>
+{{ end }}

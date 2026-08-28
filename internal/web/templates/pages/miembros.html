@@ -1,0 +1,128 @@
+{{ define "miembros.html" }}
+<section class="page-wide">
+    {{ if .SinEmpresa }}
+    {{ template "sin_empresa" . }}
+    {{ else }}
+    <div class="wapp-card">
+        <h1 class="wapp-title">Miembros de tu empresa</h1>
+        <p class="wapp-subtitle">
+            Quién pertenece a tu empresa en wApp. Dar de baja retira la pertenencia, no la cuenta:
+            la persona sigue existiendo en el proveedor de identidad.
+        </p>
+
+        {{ template "flashes" . }}
+
+        {{/*
+        La empresa se pinta como DATO, no como control, y aquí NO HAY SELECTOR DE EMPRESAS.
+
+        Hoy una sesión tiene exactamente una: el canje del token falla con ErrMultipleTenants si la
+        persona pertenece a más de una (MD-055.2), así que un selector no tendría entre qué elegir y
+        ofrecerlo sería prometer un cambio que la sesión no puede hacer. El día que el canje sepa
+        elegir empresa, el control aparece justo aquí.
+
+        El <select> que sí hay en esta pantalla es el del ROL en el alta, y es de otra cosa.
+        */}}
+        <dl class="session-facts">
+            <dt class="session-facts__term">Empresa</dt>
+            <dd class="session-facts__value" id="tenant-actual">{{ .TenantID }}</dd>
+        </dl>
+
+        <p class="section-note" id="nota-identidad">
+            wApp no guarda el nombre ni el correo de las personas: solo su identificador. La identidad
+            vive en el proveedor de identidad del grupo, y es ahí donde se consulta o se corrige.
+            Pasa el ratón por encima de un identificador para verlo completo.
+        </p>
+    </div>
+
+    <div class="wapp-card card-stacked" id="section-incorporar">
+        <h2 class="section-title">Incorporar a alguien</h2>
+        {{/*
+        La persona se identifica por el UUID que ella misma aporta, y no por su correo: esta consola
+        no puede buscar en el padrón. Resolver un correo con `EnsureUser` CREARÍA la cuenta si no
+        existe —dejando cuentas fantasma adoptables—, y un buscador de solo lectura sería un oráculo
+        para preguntar si un correo ajeno está en wApp. La vía buena es la invitación (Ola A).
+        */}}
+        <p class="section-note" id="nota-como-incorporar">
+            Solo se puede incorporar a quien ya tenga cuenta en wApp. Pídele que se registre y que te
+            pase su identificador: lo tiene a la vista en
+            <a href="/mi-identificador">Mi identificador</a>. Desde aquí no se puede buscar a nadie
+            por su correo.
+        </p>
+
+        <form method="POST" action="/miembros" class="stack-form" id="form-add-member">
+            <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="add-user">Identificador de la persona</label>
+                <input class="wapp-field__control mono" type="text" id="add-user" name="user_id"
+                       required maxlength="64" autocomplete="off"
+                       placeholder="00000000-0000-0000-0000-000000000000">
+            </div>
+            {{/*
+            El desplegable de rol se OMITE si el catálogo no se pudo leer, en vez de pintarse vacío:
+            un <select> sin opciones parece un fallo del formulario. Sin él el alta sigue funcionando
+            —el rol es opcional— y el rol se asigna después desde Roles.
+            */}}
+            {{ if .Roles }}
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="add-role">Rol (opcional)</label>
+                <select class="wapp-field__control" id="add-role" name="role_id">
+                    <option value="">Sin rol por ahora</option>
+                    {{ range .Roles }}
+                    <option value="{{ .RoleID }}">{{ .Name }}</option>
+                    {{ end }}
+                </select>
+            </div>
+            {{ end }}
+            <div class="wapp-actions">
+                <button type="submit" class="btn btn--primary">Incorporar</button>
+            </div>
+        </form>
+
+        <p class="section-note" id="nota-alta-en-dos-pasos">
+            El alta y el rol son dos operaciones distintas: si la primera funciona y la segunda no, la
+            persona queda dentro y sin rol, y se te avisa para que se lo asignes desde Roles.
+        </p>
+    </div>
+
+    <div class="wapp-card card-stacked" id="section-listado">
+        {{ if .Members }}
+        <table class="data-table" id="table-members">
+            <caption class="data-table__caption">Personas dadas de alta en esta empresa</caption>
+            <thead>
+                <tr>
+                    <th scope="col">Identificador</th>
+                    <th scope="col">Alta</th>
+                    <th scope="col">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{ range .Members }}
+                <tr>
+                    <td>
+                        <code class="mono" title="{{ .UserID }}">{{ .Short }}</code>
+                        {{ if .IsSelf }}<span class="chip chip--info">tú</span>{{ end }}
+                    </td>
+                    <td class="mono">{{ if .JoinedAt }}{{ .JoinedAt }}{{ else }}—{{ end }}</td>
+                    <td>
+                        {{ if .IsSelf }}
+                        <span class="section-note">No puedes darte de baja a ti mismo.</span>
+                        {{ else }}
+                        <form method="POST" action="/miembros/{{ .UserID }}/baja" class="inline-form">
+                            <input type="hidden" name="csrf_token" value="{{ $.CSRFToken }}">
+                            <button type="submit" class="btn btn--danger">Dar de baja</button>
+                        </form>
+                        {{ end }}
+                    </td>
+                </tr>
+                {{ end }}
+            </tbody>
+        </table>
+        {{ else }}
+        <p class="empty-state" id="members-vacio">
+            Todavía no hay nadie más en esta empresa.
+        </p>
+        {{ end }}
+    </div>
+    {{ end }}
+</section>
+{{ end }}
