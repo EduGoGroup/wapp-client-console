@@ -170,8 +170,14 @@ func NewRouterWithLimiter(cfg *config.Config) (*gin.Engine, func()) {
 	// identificador). No llama a la API pública.
 	protected.GET("/mi-identificador", adminH.ShowMyIdentifier)
 
-	// Miembros (T1.4a). No hay ruta de ALTA: está bloqueada (ver AdminHandler).
+	// Miembros (T1.4a) y su ALTA (T1.2).
+	//
+	// El alta es POST /miembros, simétrica con POST /roles: el formulario vive DENTRO de la pantalla
+	// de miembros —igual que crear y asignar viven dentro de la de roles— y no en una pantalla
+	// aparte, porque tras incorporar a alguien lo que se quiere ver es la tabla con esa persona ya
+	// dentro. De ahí que las dos redirijan a /miembros (POST-redirect-GET).
 	protected.GET("/miembros", adminH.ShowMembers)
+	protected.POST("/miembros", adminH.AddMember)
 	protected.POST("/miembros/:user_id/baja", adminH.RemoveMember)
 
 	// Roles (T1.3). Asignar y retirar cuelgan de /roles y no de /miembros porque lo que mueven es un

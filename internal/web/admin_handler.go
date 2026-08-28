@@ -16,10 +16,10 @@ import (
 // sale el Context Token y el refresco) y el cliente de la API pública—, y partirlas en tres structs
 // idénticos solo repetiría el cableado.
 //
-// 🔴 Lo que NO hay aquí, y no por olvido: el ALTA de una persona (POST /api/v1/members). Está
-// bloqueada porque la consola no sabe traducir un correo al UUID de identity de esa persona, y
-// pedirle ese UUID a la dueña de un negocio sería trasladarle un hueco del cloud. Quien venga a
-// añadirla, que traiga antes la resolución correo → UUID.
+// El ALTA de una persona (POST /api/v1/members) vive aquí desde T1.2, y la vía es que la persona
+// aporte su propio identificador. Lo que sigue sin existir es la búsqueda por correo, y las dos
+// formas de tenerla están descartadas a conciencia; el porqué —y la vía buena, la invitación de la
+// Ola A / D-047.11— está en MembersClient (internal/apiclient/members.go).
 type AdminHandler struct {
 	auth *AuthHandler
 	api  *apiclient.Client

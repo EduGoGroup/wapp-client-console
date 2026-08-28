@@ -79,33 +79,38 @@ func TestMiembros_MarcaAlUsuarioDeLaSesionYNoLeOfreceDarseDeBaja(t *testing.T) {
 // TestMiembros_LaEmpresaEsUnDatoYNoHaySelector (T1.4a, criterio de la ola).
 //
 // Con UNA sola empresa —el único caso posible hoy, porque el canje falla con ErrMultipleTenants si la
-// persona pertenece a más de una (MD-055.2)— NO se pinta selector.
+// persona pertenece a más de una (MD-055.2)— NO se pinta selector DE EMPRESA.
 //
-// El negativo se ancla junto a su gemelo positivo por partida doble, que es lo que lo hace no vacuo:
+// ⚠️ El aserto era «esta pantalla no tiene ningún <select>» y dejó de valer con el alta (T1.2), que
+// trae uno legítimo: el del rol opcional. Aquello era una BROCHA —funcionaba solo mientras la
+// pantalla no tuviera desplegables por otro motivo—, así que se estrecha a lo que el criterio dice
+// de verdad, y se aprieta: se cuenta cuántos hay y se afirma que el único es el del rol. Un selector
+// de empresa nuevo ya no se cuela ni aunque alguien lo llame de otra forma.
+//
+// El negativo se ancla junto a sus gemelos positivos, que es lo que lo hace no vacuo:
 //  1. la empresa SÍ se pinta, como dato de solo lectura en `id="tenant-actual"` — si alguien
 //     convirtiera ese bloque en un control, el positivo seguiría verde y el negativo caería;
-//  2. esta consola SÍ sabe pintar `<select>` —la pantalla de roles tiene dos—, así que «aquí no hay
-//     ninguno» es una decisión observable y no la ausencia de una capacidad que no existe.
+//  2. esta pantalla SÍ sabe pintar un `<select>` —el del rol—, así que «aquí no hay uno de empresa»
+//     es una decisión observable y no la ausencia de una capacidad que no existe.
 func TestMiembros_LaEmpresaEsUnDatoYNoHaySelector(t *testing.T) {
 	t.Parallel()
 	api := newStubAPI(t, membersOK())
-	router := adminRouter(api)
 
-	miembros := getWithSession(t, router, "/miembros").Body.String()
-	roles := getWithSession(t, router, "/roles").Body.String()
+	miembros := getWithSession(t, adminRouter(api), "/miembros").Body.String()
 
 	// Positivo 1: la empresa está en la pantalla, como dato.
 	if !strings.Contains(miembros, `id="tenant-actual"`) || !strings.Contains(miembros, testTenantID) {
 		t.Fatal("la pantalla no pinta la empresa de la sesión: el negativo de abajo sería vacuo")
 	}
-	// Positivo 2: la consola sabe pintar selectores; la de roles trae dos.
-	if !strings.Contains(roles, `<select`) {
-		t.Fatal("la pantalla de roles no pinta ningún <select>: el negativo de abajo sería vacuo")
+	// Positivo 2: la pantalla sabe pintar un desplegable, y lo hace.
+	if !strings.Contains(miembros, `name="role_id"`) {
+		t.Fatal("la pantalla no pinta el <select> de rol: el negativo de abajo sería vacuo")
 	}
 
-	// Negativo: en miembros no hay ningún control para cambiar de empresa.
-	if strings.Contains(miembros, "<select") {
-		t.Error("la pantalla de miembros pinta un <select>: con una sola empresa no debe haber selector")
+	// Negativo: el ÚNICO desplegable es el del rol. Cualquier otro es un selector que no debería
+	// estar, y con una sola empresa el candidato evidente es el de empresa.
+	if n := strings.Count(miembros, "<select"); n != 1 {
+		t.Errorf("la pantalla pinta %d <select>, want 1 (solo el del rol del alta)", n)
 	}
 	if strings.Contains(miembros, `name="tenant_id"`) || strings.Contains(miembros, `id="tenant-switcher"`) {
 		t.Error("la pantalla de miembros ofrece cambiar de empresa; hoy el canje no sabe elegir (MD-055.2)")

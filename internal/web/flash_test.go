@@ -25,6 +25,7 @@ func TestFlash_TodoDesenlaceDelApiclientTieneTexto(t *testing.T) {
 		apiclient.ErrConflict,
 		apiclient.ErrInvalidInput,
 		apiclient.ErrMemberOfAnotherTenant,
+		apiclient.ErrPersonUnknown,
 		&apiclient.APIError{Op: "prueba", StatusCode: http.StatusInternalServerError},
 		errors.New("fallo de red"),
 	}
@@ -45,18 +46,76 @@ func TestFlash_TodoDesenlaceDelApiclientTieneTexto(t *testing.T) {
 
 // TestFlash_ElOrdenDeLasRamasProtegeAlMensajeEspecifico.
 //
-// ErrMemberOfAnotherTenant ENVUELVE a ErrConflict. Si flashCodeFor preguntara antes por el genérico,
-// la guarda de membresía única (MD-055.2) se explicaría como «ya existe algo con ese nombre», que no
-// dice nada de lo que de verdad pasó. El orden es contrato, no estilo.
+// Los DOS pares de sentinelas envueltos, en el mismo test porque comparten la regla: el específico va
+// antes que el genérico o el genérico se lo come, sin que nada falle y con el usuario leyendo otra
+// cosa. El orden es contrato, no estilo.
+//
+// Cada par se afirma con su GEMELO —el error genérico de verdad— al lado: sin él, un flashCodeFor
+// que devolviera siempre el código específico pasaría el positivo.
 func TestFlash_ElOrdenDeLasRamasProtegeAlMensajeEspecifico(t *testing.T) {
 	t.Parallel()
 
+	// Par 1: ErrMemberOfAnotherTenant envuelve a ErrConflict (MD-055.2).
 	envuelto := fmt.Errorf("members.add: %w", apiclient.ErrMemberOfAnotherTenant)
 	if got := flashCodeFor(envuelto); got != flashMemberElsewhere {
 		t.Errorf("flashCodeFor(ErrMemberOfAnotherTenant) = %q, want %q", got, flashMemberElsewhere)
 	}
 	if got := flashCodeFor(fmt.Errorf("roles.create: %w", apiclient.ErrConflict)); got != flashConflict {
 		t.Errorf("un conflicto genérico dio %q, want %q", got, flashConflict)
+	}
+
+	// Par 2: ErrPersonUnknown envuelve a ErrNotFound. Al revés, el 404 del alta —un UUID que no
+	// existe en NINGUNA empresa— se explicaría como «no pertenece a tu empresa».
+	if got := flashCodeFor(fmt.Errorf("members.add: %w", apiclient.ErrPersonUnknown)); got != flashPersonUnknown {
+		t.Errorf("flashCodeFor(ErrPersonUnknown) = %q, want %q", got, flashPersonUnknown)
+	}
+	if got := flashCodeFor(fmt.Errorf("members.remove: %w", apiclient.ErrNotFound)); got != flashNotInYourTenant {
+		t.Errorf("un 404 genérico dio %q, want %q", got, flashNotInYourTenant)
+	}
+}
+
+// TestFlash_ElTextoDelAltaDiceQueNoExisteYNuncaQueEsDeOtraEmpresa.
+//
+// Es el simétrico exacto de TestFlash_ElTextoDel404NoDiceQueNoExiste, y los dos tienen que convivir:
+// el MISMO código HTTP se traduce a dos textos contrarios según la operación, porque significa dos
+// cosas contrarias. El negativo es el que importa —«no pertenece a tu empresa» es justo el texto que
+// saldría con la rama mal ordenada— y además el mensaje tiene que decir qué hacer, que aquí sí se
+// puede: pedirle a la persona su identificador.
+func TestFlash_ElTextoDelAltaDiceQueNoExisteYNuncaQueEsDeOtraEmpresa(t *testing.T) {
+	t.Parallel()
+
+	msg := flashError(flashPersonUnknown)
+	if !strings.Contains(msg, "no existe") {
+		t.Errorf("el texto del 404 del alta no dice que no existe: %q", msg)
+	}
+	if strings.Contains(msg, "no pertenece a tu empresa") {
+		t.Errorf("el texto del 404 del alta habla de frontera de empresa, y ahí no hay ninguna: %q", msg)
+	}
+	if !strings.Contains(msg, "Mi identificador") {
+		t.Errorf("el texto no dice de dónde saca la persona su identificador: %q", msg)
+	}
+}
+
+// TestFlash_ElAvisoDeAltaSinRolNoSeDaComoExito.
+//
+// Es un estado a medias —la persona entró, el rol no se le puso— y vive entre los ERRORES a
+// propósito: como éxito, alguien se quedaría dentro de la empresa creyendo que tiene permisos que no
+// tiene. El aviso tiene que decir las dos mitades y adónde ir a arreglarlo.
+func TestFlash_ElAvisoDeAltaSinRolNoSeDaComoExito(t *testing.T) {
+	t.Parallel()
+
+	if !flashErrors.Known(flashAddedWithoutRole) {
+		t.Fatal("el aviso de «incorporada sin rol» no está entre los errores")
+	}
+	if flashSuccesses.Known(flashAddedWithoutRole) {
+		t.Error("el aviso de «incorporada sin rol» está entre los ÉXITOS: no lo es, la mitad falló")
+	}
+	msg := flashError(flashAddedWithoutRole)
+	if !strings.Contains(msg, "quedó incorporada") {
+		t.Errorf("el aviso no dice que la persona SÍ entró: %q", msg)
+	}
+	if !strings.Contains(msg, "Roles") {
+		t.Errorf("el aviso no dice dónde asignar el rol que faltó: %q", msg)
 	}
 }
 
@@ -84,12 +143,13 @@ func TestFlash_ElTextoDel404NoDiceQueNoExiste(t *testing.T) {
 func TestFlash_TodosLosCodigosDeLasPantallasTienenTexto(t *testing.T) {
 	t.Parallel()
 
-	for _, code := range []string{flashSessionExpired, flashSelfRemoval, flashMissingField} {
+	for _, code := range []string{flashSessionExpired, flashSelfRemoval, flashMissingField, flashAddedWithoutRole} {
 		if !flashErrors.Known(code) {
 			t.Errorf("el código de error %q no tiene texto", code)
 		}
 	}
-	for _, code := range []string{flashLoggedOut, flashMemberRemoved, flashRoleCreated, flashRoleAssigned, flashRoleRemoved} {
+	for _, code := range []string{flashLoggedOut, flashMemberAdded, flashMemberRemoved, flashRoleCreated,
+		flashRoleAssigned, flashRoleRemoved} {
 		if !flashSuccesses.Known(code) {
 			t.Errorf("el código de éxito %q no tiene texto", code)
 		}

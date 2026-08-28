@@ -23,12 +23,19 @@ type memberView struct {
 	IsSelf   bool
 }
 
-// ShowMembers pinta la pantalla de miembros del tenant (T1.4a): quién está en la empresa y el botón
-// para darlo de baja.
+// ShowMembers pinta la pantalla de miembros del tenant (T1.4a · T1.2): el formulario para incorporar
+// a alguien, quién está ya en la empresa y el botón para darlo de baja.
 //
-// La pantalla sirve 200 aunque el listado falle: el aviso se pinta arriba y el marco sigue
-// navegable. La excepción es el 401 que sobrevivió al refresco —ahí la sesión ya no vale y lo que
-// toca es expulsar a /login, no enseñar una pantalla vacía con un mensaje que el usuario no puede
+// Hace DOS llamadas —miembros y roles— porque el alta ofrece asignar un rol en el mismo paso, y cada
+// una degrada por su lado. La pantalla sirve 200 aunque alguna falle: el aviso se pinta arriba y el
+// marco sigue navegable.
+//
+// 🔴 Que el catálogo de roles no se pueda leer NO puede tumbar esta pantalla: lo que se pierde es el
+// desplegable opcional del formulario —que se omite—, no la tabla ni el alta. La lista de personas es
+// para lo que se entra aquí, y un fallo en un accesorio no debe llevársela por delante.
+//
+// La excepción a todo lo anterior es el 401 que sobrevivió al refresco: ahí la sesión ya no vale y lo
+// que toca es expulsar a /login, no enseñar una pantalla vacía con un mensaje que el usuario no puede
 // resolver desde ella.
 func (h *AdminHandler) ShowMembers(c *gin.Context) {
 	// Sin empresa no hay a quién listar, y la API respondería 403 —«no tienes permiso»—, que es un
@@ -39,25 +46,93 @@ func (h *AdminHandler) ShowMembers(c *gin.Context) {
 	}
 
 	var miembros []apiclient.Member
-	var callErr error
-	code := flashCodeFor(h.auth.withAuthRetry(c, func(accessToken string) error {
+	var roles []apiclient.Role
+	var membersErr, rolesErr error
+
+	membersCode := flashCodeFor(h.auth.withAuthRetry(c, func(accessToken string) error {
 		var err error
 		miembros, err = h.api.Members.List(c.Request.Context(), accessToken)
-		callErr = err
+		membersErr = err
 		return err
 	}))
-	if sessionIsDead(callErr) {
+	rolesCode := flashCodeFor(h.auth.withAuthRetry(c, func(accessToken string) error {
+		var err error
+		roles, err = h.api.Roles.List(c.Request.Context(), accessToken)
+		rolesErr = err
+		return err
+	}))
+	if sessionIsDead(membersErr) || sessionIsDead(rolesErr) {
 		h.auth.expireSession(c)
 		return
 	}
 
 	data := h.pageData(c, "Miembros")
-	if code != "" {
-		slog.Warn("no se pudo listar los miembros de la empresa", "codigo", code, "error", callErr)
-		data["Error"] = flashError(code)
+	if membersCode != "" {
+		slog.Warn("no se pudo listar los miembros de la empresa", "codigo", membersCode, "error", membersErr)
+		data["Error"] = flashError(membersCode)
+	}
+	if rolesCode != "" {
+		slog.Warn("no se pudo listar el catálogo de roles para el alta", "codigo", rolesCode, "error", rolesErr)
+		// El aviso del listado principal manda: es el que explica por qué la tabla está vacía.
+		if membersCode == "" {
+			data["Error"] = flashError(rolesCode)
+		}
 	}
 	data["Members"] = membersView(miembros, webgin.UserIDFromContext(c))
+	data["Roles"] = rolesView(roles)
 	renderer.HTML(c, http.StatusOK, "miembros.html", data)
+}
+
+// AddMember incorpora a la empresa del token a alguien que YA TIENE CUENTA, por el identificador que
+// esa persona aporta desde «Mi identificador» (T1.6), y opcionalmente le asigna un rol en el mismo
+// paso (T1.2).
+//
+// 🔴 Son DOS operaciones de la plataforma y NO son atómicas: no hay endpoint que las una ni
+// transacción que las envuelva. Y no es un descuido del cloud —GrantTenantAccess SÍ sabe escribir
+// membresía y rol en una sola tx, y la vía del operador la usa así—, sino una decisión suya: por la
+// vía de la dueña pasa roleID nil a propósito, porque «dar de alta» y «dar un rol» son dos
+// decisiones distintas del administrador. Si el alta va bien y la asignación falla, la persona queda
+// incorporada y sin rol, y eso es lo que se le dice (flashAddedWithoutRole) — con el sitio donde
+// arreglarlo.
+//
+// Por qué NO se compensa dando de baja, para que nadie lo "arregle":
+//   - la baja NO retira roles ni grants (ver members.go), así que un rollback no devolvería el
+//     sistema al estado inicial: dejaría uno TERCERO, sin membresía y con las asignaciones que
+//     hubiera de antes;
+//   - y borraría una incorporación que la dueña sí quería. El rol es el campo OPCIONAL del
+//     formulario; deshacer lo obligatorio porque falló lo opcional es perder trabajo bueno.
+func (h *AdminHandler) AddMember(c *gin.Context) {
+	userID := formValue(c, "user_id")
+	if userID == "" {
+		redirectWith(c, "/miembros", flashMissingField, "")
+		return
+	}
+	roleID := formValue(c, "role_id")
+
+	if code := h.call(c, func(accessToken string) error {
+		return h.api.Members.Add(c.Request.Context(), accessToken, userID)
+	}); code != "" {
+		// Sin el identificador: en el log de esta consola no entra la identidad de un tercero.
+		slog.Warn("no se pudo incorporar a la persona", "codigo", code)
+		redirectWith(c, "/miembros", code, "")
+		return
+	}
+
+	if roleID == "" {
+		redirectWith(c, "/miembros", "", flashMemberAdded)
+		return
+	}
+
+	if code := h.call(c, func(accessToken string) error {
+		return h.api.Roles.Assign(c.Request.Context(), accessToken, userID, roleID)
+	}); code != "" {
+		// El código concreto del fallo se queda en el log: en pantalla importa el ESTADO en que
+		// quedaron las cosas —dentro, sin rol— y no cuál de los desenlaces del asignador ocurrió.
+		slog.Warn("la persona quedó incorporada pero sin el rol pedido", "codigo", code)
+		redirectWith(c, "/miembros", flashAddedWithoutRole, "")
+		return
+	}
+	redirectWith(c, "/miembros", "", flashMemberAdded)
 }
 
 // membersView proyecta la respuesta de la API a filas de la tabla, marcando cuál es el propio

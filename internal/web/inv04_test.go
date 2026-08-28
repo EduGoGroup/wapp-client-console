@@ -16,7 +16,7 @@ import (
 //     y la consola lo trata como frontera, no como inexistencia.
 
 // ejerceTodasLasPantallas recorre TODA la superficie de la consola contra el doble: las tres páginas
-// y las cuatro operaciones. Devuelve el doble con todo lo capturado.
+// y las cinco operaciones. Devuelve el doble con todo lo capturado.
 //
 // Que sea exhaustivo es el punto: un aserto sobre «las llamadas» que solo recorriera una pantalla
 // dejaría fuera justo la que un día mande el tenant de más.
@@ -30,6 +30,7 @@ func ejerceTodasLasPantallas(t *testing.T) *stubAPI {
 		"DELETE /api/v1/members/{user_id}": {http.StatusNoContent, ""},
 		"POST /api/v1/roles": {http.StatusCreated,
 			`{"role_id":"cccccccc-cccc-4ccc-8ccc-cccccccccccc","name":"Cajera","global":false}`},
+		"POST /api/v1/members":                             {http.StatusNoContent, ""},
 		"POST /api/v1/members/{user_id}/roles":             {http.StatusNoContent, ""},
 		"DELETE /api/v1/members/{user_id}/roles/{role_id}": {http.StatusNoContent, ""},
 	})
@@ -41,6 +42,9 @@ func ejerceTodasLasPantallas(t *testing.T) *stubAPI {
 			t.Fatalf("GET %s status = %d, want 200", ruta, rec.Code)
 		}
 	}
+	// El alta con rol, que son DOS llamadas: ninguna de las dos puede llevar la empresa.
+	postFormWithCSRF(router, "/miembros",
+		url.Values{"user_id": {testOtherUserID}, "role_id": {testTenantRoleID}}, sess)
 	postFormWithCSRF(router, "/miembros/"+testOtherUserID+"/baja", url.Values{}, sess)
 	postFormWithCSRF(router, "/roles", url.Values{"name": {"Cajera"}, "parent_role_id": {testGlobalRoleID}}, sess)
 	postFormWithCSRF(router, "/roles/asignar",
@@ -48,7 +52,7 @@ func ejerceTodasLasPantallas(t *testing.T) *stubAPI {
 	postFormWithCSRF(router, "/roles/retirar",
 		url.Values{"user_id": {testOtherUserID}, "role_id": {testTenantRoleID}}, sess)
 
-	if len(api.Requests()) < 7 {
+	if len(api.Requests()) < 9 {
 		t.Fatalf("solo se capturaron %d peticiones: el recorrido no ejercitó la superficie completa (%v)",
 			len(api.Requests()), routesOf(api.Requests()))
 	}
@@ -109,6 +113,13 @@ func TestINV04_TodoLoQueSaleVaAlPlanoPublico(t *testing.T) {
 // La plataforma responde 404 —y no 403— cuando el identificador es de otra empresa: distinguirlos
 // diría que ese UUID existe en algún sitio. La consola tiene que conservar esa ambigüedad en el texto
 // que pinta, para las CUATRO operaciones que pueden recibirlo.
+//
+// 🔴 EL ALTA NO ESTÁ EN ESTA TABLA, y su ausencia es la afirmación, no un olvido: es la única
+// operación de la consola donde un 404 significa lo contrario. El alta pregunta por el PADRÓN de
+// identity, no por un recurso del tenant, así que ahí no hay frontera de empresa que proteger y
+// «no pertenece a tu empresa» sería un diagnóstico falso ante el fallo más frecuente de esa
+// pantalla: un UUID mal pegado. Meterla aquí haría caer el test — y haría bien. Su criterio, que es
+// el simétrico, está en el test HERMANO justo debajo; se leen juntos a propósito.
 func TestCrossTenant_El404NoSeCuentaComoInexistencia(t *testing.T) {
 	t.Parallel()
 
@@ -154,5 +165,43 @@ func TestCrossTenant_El404NoSeCuentaComoInexistencia(t *testing.T) {
 				t.Error("el aviso dice «no encontrado»: eso es justo lo que este 404 NO significa")
 			}
 		})
+	}
+}
+
+// TestCrossTenant_ElAltaEsLaEXCEPCION_SuS404SiEsInexistencia.
+//
+// El hermano del de arriba, y el que fija por qué el alta no está en su tabla. Aquí el 404 SÍ es «no
+// existe»: la plataforma consultó identity con su credencial M2M y ese UUID no está en el padrón. No
+// hay otra empresa al otro lado cuyo secreto haya que guardar.
+//
+// El aserto NEGATIVO —que jamás se pinte «no pertenece a tu empresa»— importa tanto como el
+// positivo: ese es el texto que saldría solo con que alguien tradujera el 404 del alta con el
+// traductor genérico o moviera la rama de ErrPersonUnknown detrás de la de ErrNotFound. Las dos
+// regresiones dejan todo lo demás en verde.
+func TestCrossTenant_ElAltaEsLaEXCEPCION_SuS404SiEsInexistencia(t *testing.T) {
+	t.Parallel()
+
+	rutas := rolesOK()
+	rutas["GET /api/v1/members"] = stubResponse{http.StatusOK, membersBody(testUserID, testOtherUserID)}
+	rutas["POST /api/v1/members"] = stubResponse{http.StatusNotFound, `{"error":"usuario no encontrado"}`}
+	api := newStubAPI(t, rutas)
+	router := adminRouter(api)
+
+	rec := postFormWithCSRF(router, "/miembros", url.Values{"user_id": {testOtherUserID}}, clientSessionCookie(t))
+	destino := redirectTarget(t, rec)
+	if destino != "/miembros?error="+flashPersonUnknown {
+		t.Fatalf("Location = %q, want %q", destino, "/miembros?error="+flashPersonUnknown)
+	}
+
+	out := getWithSession(t, router, destino).Body.String()
+	if !strings.Contains(out, "no existe en wApp") {
+		t.Errorf("el 404 del alta no se explica como inexistencia. Body: %s", out)
+	}
+	if strings.Contains(out, "no pertenece a tu empresa") {
+		t.Error("el 404 del alta se explicó como frontera de empresa: ahí no hay ninguna empresa al otro lado")
+	}
+	// Y el detalle del upstream sigue sin pintarse: el texto sale del catálogo.
+	if strings.Contains(out, "usuario no encontrado") {
+		t.Error("el mensaje del upstream acabó en pantalla")
 	}
 }

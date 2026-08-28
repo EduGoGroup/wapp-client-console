@@ -70,6 +70,21 @@ var (
 // errors.Is(err, ErrConflict); quien quiera dar el mensaje exacto pregunta por este.
 var ErrMemberOfAnotherTenant = fmt.Errorf("apiclient: la persona ya pertenece a otra empresa: %w", ErrConflict)
 
+// ErrPersonUnknown es el 404 del ALTA de un miembro, y es la ÚNICA operación de esta consola donde
+// un 404 sí significa «no existe».
+//
+// El motivo es que el alta no pregunta por un recurso de la empresa: pregunta por una persona del
+// PADRÓN. La plataforma consulta identity con su credencial M2M y, si ese UUID no está allí,
+// responde 404 — sin frontera de tenant que proteger, porque no hay nada al otro lado. Y es el
+// desenlace más probable de esa pantalla: quien pega un identificador se equivoca de carácter.
+//
+// 🔴 ENVUELVE a ErrNotFound —igual que ErrMemberOfAnotherTenant envuelve a ErrConflict—, así que
+// quien solo quiera saber «hubo un 404» sigue funcionando con errors.Is(err, ErrNotFound). La
+// consecuencia es que el ORDEN manda en cualquier switch que los distinga: preguntar antes por el
+// genérico se come este significado y el usuario lee «no pertenece a tu empresa» ante un UUID que
+// no existe en ninguna. Ver flashCodeFor en internal/web.
+var ErrPersonUnknown = fmt.Errorf("apiclient: esa persona no existe en el proveedor de identidad: %w", ErrNotFound)
+
 // APIError es un fallo con el status del upstream, para los códigos que no tienen sentinela (5xx y
 // cualquier otro inesperado). StatusCodeOf lo extrae.
 type APIError struct {
