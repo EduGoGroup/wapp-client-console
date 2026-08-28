@@ -73,6 +73,12 @@ func TestSesiones_PintaLasSesionesQueDevuelveElCloud(t *testing.T) {
 	if !strings.Contains(out, `action="/sesiones/`+testSessionID+`/perfil"`) {
 		t.Error("el formulario de perfil no apunta a la ruta de esa sesión")
 	}
+	// La columna se titula «Perfil» y no «Rol». Portado del BFF: `role` fue el eje viejo, lo retiró la
+	// migración 0064 y el vocabulario se cambió con él (ADR-0027). Cuando el dashboard del BFF se
+	// retire, este es el único sitio del ecosistema que impide que el nombre viejo vuelva a la vista.
+	if !strings.Contains(out, `<th scope="col">Perfil</th>`) {
+		t.Error("la columna debía titularse «Perfil»; «Rol» es el eje viejo que retiró la 0064")
+	}
 }
 
 // TestSesiones_SinNumeroPropioLaEtiquetaEsElIdentificador es el gemelo del anterior por la rama que
