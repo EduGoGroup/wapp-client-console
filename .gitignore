@@ -1,0 +1,26 @@
+# Binarios Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/client-console
+
+# Directorios de salida
+bin/
+dist/
+
+# Entorno
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store
+
+# Editor
+.idea/
+*.swp
+*.swo
