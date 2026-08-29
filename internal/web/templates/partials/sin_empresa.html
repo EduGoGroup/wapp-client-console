@@ -1,11 +1,18 @@
 {{/*
 sin_empresa es lo que ve quien tiene sesión y todavía no pertenece a ninguna empresa.
 
-Es un parcial porque lo pintan CUATRO pantallas —la portada y las tres de administración (miembros,
-invitaciones y roles), a las que se puede llegar por la URL aunque la navegación no las ofrezca—, y
-el texto tiene que ser el mismo en las cuatro: si cada una lo escribiera a su manera, la que menos se
-mira acabaría diciendo «no tienes permiso», que es justo el diagnóstico equivocado que este bloque
-existe para evitar. (Eran TRES hasta la Ola A, que estrenó la de invitaciones.)
+Es un parcial porque lo pintan CINCO pantallas —la portada, sesiones y las tres de administración
+(miembros, invitaciones y roles), a las que se puede llegar por la URL aunque la navegación no las
+ofrezca—, y el texto tiene que ser el mismo en las cinco: si cada una lo escribiera a su manera, la
+que menos se mira acabaría diciendo «no tienes permiso», que es justo el diagnóstico equivocado que
+este bloque existe para evitar. (Eran TRES hasta la Ola A, que estrenó la de invitaciones.)
+
+🔴 Este recuento se ha dado mal dos veces —«tres», luego «cuatro»—, asi que cuéntalo, no lo copies:
+    grep -rln 'template "sin_empresa"' internal/web/templates/
+Y ojo con `mi-identificador.html`, que NO invoca este parcial: escribe su PROPIO texto para la misma
+situación (`{{ if .SinEmpresa }}`, línea 25) y sigue contando solo el camino viejo —«dale tu
+identificador a quien administra»— sin mencionar que ahora basta con pegar un código. Es
+exactamente la divergencia que este parcial existe para impedir, ocurriendo fuera de su alcance.
 
 🔴 Y POR ESO MISMO, LA OLA A NO LE PUSO UNA PANTALLA AL LADO: LE CAMBIÓ EL TEXTO. Aquí vivía el apaño
 de T1.6 —«necesita tu identificador, cópialo y pásaselo»—, que era la única vía cuando quien

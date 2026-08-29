@@ -645,18 +645,67 @@ func TestCanje_SinTokenNoSaleALaRed(t *testing.T) {
 //
 // El parcial `sin_empresa` es parcial justo por esto: quien llega sin empresa puede caer en
 // cualquiera de las cuatro y tiene que leer y poder hacer lo mismo. Antes de la Ola A las cuatro
-// decían «pásale tu identificador»; ahora las cuatro traen el formulario del canje.
+// decían «pásale tu identificador»; ahora todas traen el formulario del canje.
 //
 // El aserto NEGATIVO —que el identificador ya no sea la vía principal— va con su positivo: el enlace
 // sigue existiendo, porque no todo el mundo llega con una invitación.
-func TestSinEmpresa_LasCuatroPantallasOfrecenElMISMOCanje(t *testing.T) {
+//
+// 🔴 EL NOMBRE YA NO DICE UN NÚMERO, Y ES A PROPÓSITO. Esta enumeración ha caducado TRES veces
+// —eran tres pantallas, luego cuatro, hoy cinco— y las tres veces el test siguió en verde
+// recorriendo de menos: cuando se añadió `/sesiones` nadie lo noto, porque una lista escrita a mano
+// no se queja de lo que le falta. Asi que la lista ya NO se escribe: se DERIVA de las plantillas
+// que invocan el parcial, leidas del mismo `embed.FS` que sirve el binario. Lo unico a mano es el
+// mapa plantilla→ruta, y las dos direcciones fallan: una plantilla que pinte el parcial sin ruta en
+// el mapa hace fallar el test (en vez de desaparecer del recorrido en silencio), y una entrada del
+// mapa cuya plantilla ya no lo pinte tambien (asi el mapa encoge solo).
+func TestSinEmpresa_TodaPantallaQueLoPintaOfreceElMISMOCanje(t *testing.T) {
 	t.Parallel()
+
+	// Lo unico escrito a mano: que URL sirve cada plantilla. No se puede derivar del `embed.FS`
+	// porque la asociacion la hace `server.go` al registrar la ruta, no la plantilla.
+	rutaDe := map[string]string{
+		"home.html":         "/",
+		"miembros.html":     "/miembros",
+		"invitaciones.html": "/invitaciones",
+		"roles.html":        "/roles",
+		"sesiones.html":     "/sesiones",
+	}
+
+	entradas, err := templatesFS.ReadDir("templates/pages")
+	if err != nil {
+		t.Fatalf("no se pudieron listar las plantillas de pagina: %v", err)
+	}
+	pintanElParcial := map[string]bool{}
+	var rutas []string
+	for _, e := range entradas {
+		cuerpo, err := templatesFS.ReadFile("templates/pages/" + e.Name())
+		if err != nil {
+			t.Fatalf("no se pudo leer %s: %v", e.Name(), err)
+		}
+		if !strings.Contains(string(cuerpo), `template "sin_empresa"`) {
+			continue
+		}
+		pintanElParcial[e.Name()] = true
+		ruta, ok := rutaDe[e.Name()]
+		if !ok {
+			t.Fatalf("`%s` pinta el parcial `sin_empresa` y no esta en el mapa de rutas de este test: anadela, o el canje dejara de comprobarse ahi sin que nadie se entere", e.Name())
+		}
+		rutas = append(rutas, ruta)
+	}
+	if len(rutas) < 2 {
+		t.Fatalf("se derivaron %d pantallas que pintan el parcial; con menos de dos, el test no esta comprobando que el texto sea el MISMO en todas", len(rutas))
+	}
+	for plantilla := range rutaDe {
+		if !pintanElParcial[plantilla] {
+			t.Errorf("`%s` esta en el mapa de este test pero ya no pinta el parcial `sin_empresa`: quitala del mapa", plantilla)
+		}
+	}
 
 	api := newStubAPI(t, invitacionesOK())
 	router := adminRouter(api)
 	sinTenant := sessionCookieFor(t, testUserID, "")
 
-	for _, ruta := range []string{"/", "/miembros", "/invitaciones", "/roles"} {
+	for _, ruta := range rutas {
 		rec := getConCookie(router, ruta, sinTenant)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("GET %s sin empresa = %d, want 200", ruta, rec.Code)
