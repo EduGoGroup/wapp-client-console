@@ -46,7 +46,7 @@ func paginasRenderizadas(t *testing.T, router http.Handler) map[string]*httptest
 	// degradarían a su estado vacío y esta familia de tests no vería ni las tablas, ni los
 	// formularios, ni el bloque gateado por plan — que es justo donde se cuela un `style=` o un
 	// `<script>`. Un router aparte con el doble de la API pública los pinta enteros.
-	api := newStubAPI(t, map[string]stubResponse{
+	rutasAdmin := map[string]stubResponse{
 		"GET /api/v1/entitlements": {http.StatusOK, entitlementsBody("commerce", "catalog_import", "menu")},
 		"GET /api/v1/members":      {http.StatusOK, membersBody(testUserID, testOtherUserID)},
 		"GET /api/v1/roles":        {http.StatusOK, rolesBody},
@@ -61,7 +61,8 @@ func paginasRenderizadas(t *testing.T, router http.Handler) map[string]*httptest
 		// CUATRO chips de estado y el botón de anular, que solo pinta la fila pendiente.
 		"GET /api/v1/invitations":  {http.StatusOK, invitacionesBody()},
 		"POST /api/v1/invitations": {http.StatusCreated, invitacionEmitidaBody(testInviteToken)},
-	})
+	}
+	api := newStubAPI(t, rutasAdmin)
 	routerAdmin := adminRouter(api)
 	for nombre, ruta := range map[string]string{
 		"home_con_plan":    "/",
@@ -107,6 +108,33 @@ func paginasRenderizadas(t *testing.T, router http.Handler) map[string]*httptest
 			t.Fatalf("la página %q respondió %d, want 200. Body: %s", nombre, rec.Code, rec.Body.String())
 		}
 		renders[nombre] = rec
+	}
+
+	// 🆕 El SELECTOR DE EMPRESAS (T5.3) es HTML nuevo —dos bloques, con `<select>` y formulario— y
+	// tiene que pasar por esta familia o quedaría fuera de los tests de CSP, de estilo inline y de
+	// JavaScript, que es exactamente donde se cuela un `onchange=` en un desplegable.
+	//
+	// Van con un router APARTE y no cambiando el de arriba: los dos bloques son EXCLUYENTES entre sí
+	// y excluyentes con el parcial `sin_empresa`, así que servir el listado en el router principal
+	// habría sacado del recorrido las seis capturas de «sin empresa» sin que nadie lo notara.
+	rutasDosEmpresas := make(map[string]stubResponse, len(rutasAdmin)+1)
+	for ruta, resp := range rutasAdmin {
+		rutasDosEmpresas[ruta] = resp
+	}
+	rutasDosEmpresas[rutaListadoDeEmpresas] = stubResponse{http.StatusOK, dosEmpresas()}
+	routerDosEmpresas := adminRouter(newStubAPI(t, rutasDosEmpresas))
+
+	// Con empresa activa: el selector de la BARRA, que sale en las seis pantallas.
+	renders["miembros_con_selector"] = getWithSession(t, routerDosEmpresas, "/miembros")
+	// Sin empresa activa y con dos entre las que elegir: el bloque `elegir_empresa`.
+	renders["home_elegir_empresa"] = getConCookie(routerDosEmpresas, "/", sessionCookieFor(t, testUserID, ""))
+	for _, nombre := range []string{"miembros_con_selector", "home_elegir_empresa"} {
+		if rec := renders[nombre]; rec.Code != http.StatusOK {
+			t.Fatalf("la página %q respondió %d, want 200. Body: %s", nombre, rec.Code, rec.Body.String())
+		}
+		if !strings.Contains(renders[nombre].Body.String(), `id="tenant-switcher"`) {
+			t.Fatalf("la página %q no trae el selector de empresas: esta familia no lo estaría mirando", nombre)
+		}
 	}
 
 	return renders

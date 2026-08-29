@@ -11,9 +11,15 @@ import (
 //
 // Los criterios que fija no se pueden ver en el HTML ni en un doble en memoria —son sobre la petición
 // que viaja por el cable—, y son dos:
-//   - INV-04: el `tenant_id` NUNCA lo manda la UI. Sale del Context Token, que la plataforma verifica.
+//   - INV-04: el `tenant_id` no lo manda la UI. Sale del Context Token, que la plataforma verifica.
+//     🆕 Con UNA excepción desde T5.3 —la ELECCIÓN de empresa—, que va declarada abajo y con test
+//     HERMANO de aserto POSITIVO, no escondida en la tabla del invariante.
 //   - Cross-tenant ⇒ 404: la plataforma responde 404 y no 403 ante un identificador de otra empresa,
 //     y la consola lo trata como frontera, no como inexistencia.
+
+// rutaEleccionDeEmpresa es la ÚNICA llamada de esta consola que manda un `tenant_id`, y por eso está
+// escrita una sola vez: la nombran el test que la exceptúa y el que la exige.
+const rutaEleccionDeEmpresa = "POST /api/v1/auth/active-tenant"
 
 // ejerceTodasLasPantallas recorre TODA la superficie de la consola contra el doble: las páginas y
 // TODAS las operaciones. Devuelve el doble con todo lo capturado.
@@ -45,6 +51,10 @@ func ejerceTodasLasPantallas(t *testing.T) *stubAPI {
 		"POST /api/v1/invitations":        {http.StatusCreated, invitacionEmitidaBody(testInviteToken)},
 		"DELETE /api/v1/invitations/{id}": {http.StatusNoContent, ""},
 		"POST /api/v1/invitations/accept": {http.StatusNoContent, ""},
+		// El plano de la empresa DEL SUJETO (T5.3): el listado que pintan las seis pantallas y la
+		// elección, que es la excepción a INV-04 y por tanto lo que más falta hace ejercitar aquí.
+		rutaListadoDeEmpresas: {http.StatusOK, dosEmpresas()},
+		rutaEleccionDeEmpresa: {http.StatusNoContent, ""},
 	})
 	router := adminRouter(api)
 	sess := clientSessionCookie(t)
@@ -72,6 +82,8 @@ func ejerceTodasLasPantallas(t *testing.T) *stubAPI {
 	postFormWithCSRF(router, "/invitaciones", url.Values{"ttl": {"86400"}, "role_id": {testTenantRoleID}}, sess)
 	postFormWithCSRF(router, "/invitaciones/"+testInvitacionPendiente+"/revocar", url.Values{}, sess)
 	postFormWithCSRF(router, "/invitaciones/canjear", url.Values{"token": {testInviteToken}}, sess)
+	// Y la elección de empresa, que es la única llamada de toda la superficie que manda un tenant.
+	postFormWithCSRF(router, rutaEmpresa, url.Values{"tenant_id": {testOtherTenantID}}, sess)
 
 	if len(api.Requests()) < 19 {
 		t.Fatalf("solo se capturaron %d peticiones: el recorrido no ejercitó la superficie completa (%v)",
@@ -87,11 +99,21 @@ func ejerceTodasLasPantallas(t *testing.T) *stubAPI {
 // INV-04 elimina no dándole al cliente dónde ponerla.
 //
 // El aserto barre las TRES posiciones donde podría colarse: query, cuerpo y ruta.
+//
+// 🆕 🔴 Y SALTA EXACTAMENTE UNA RUTA, la elección de empresa. No se mete en la tabla porque la
+// rompería —esa llamada SÍ manda el tenant, y tiene que mandarlo—, y no se deja fuera en silencio
+// porque entonces el invariante envejecería sin que nadie lo notara: su mitad positiva está en el
+// test HERMANO de abajo, que además exige que sea la ÚNICA. La excusa de la excepción está escrita
+// en apiclient/tenants.go y es que aceptar el tenant AQUÍ es lo que permite que el CANJE no tenga
+// que aceptarlo nunca — y el canje es el que se repite solo cada ~13 minutos sin nadie delante.
 func TestINV04_LaConsolaNoMandaNuncaElTenant(t *testing.T) {
 	t.Parallel()
 	api := ejerceTodasLasPantallas(t)
 
 	for _, req := range api.Requests() {
+		if req.Route() == rutaEleccionDeEmpresa {
+			continue
+		}
 		if req.Query.Has("tenant_id") {
 			t.Errorf("%s manda tenant_id en la query: %s", req.Route(), req.Query.Encode())
 		}
@@ -105,6 +127,42 @@ func TestINV04_LaConsolaNoMandaNuncaElTenant(t *testing.T) {
 		if !strings.HasPrefix(req.Auth, "Bearer ") {
 			t.Errorf("%s salió sin Context Token: Authorization = %q", req.Route(), req.Auth)
 		}
+	}
+}
+
+// TestINV04_LaELECCIONdeEmpresaEsLaUNICAexcepcion — el hermano del de arriba, y se leen juntos.
+//
+// 🔴 UN ASERTO POSITIVO Y UN CONTEO, porque una excepción sin positivo se apaga sola: el día que
+// alguien dejara de mandar el `tenant_id` en esta ruta, el selector no cambiaría de empresa y el test
+// de arriba —que solo mira que NADIE lo mande— seguiría en verde. Y el conteo es lo que impide que la
+// excepción se ensanche: si mañana una segunda llamada empieza a mandar la empresa, cae aquí y hay
+// que decidirlo a propósito en vez de heredarlo.
+func TestINV04_LaELECCIONdeEmpresaEsLaUNICAexcepcion(t *testing.T) {
+	t.Parallel()
+	api := ejerceTodasLasPantallas(t)
+
+	// POSITIVO: la elección SÍ manda la empresa, en el cuerpo y no en la ruta ni en la query.
+	req := api.Last(t, rutaEleccionDeEmpresa)
+	if !strings.Contains(req.Body, `"tenant_id":"`+testOtherTenantID+`"`) {
+		t.Errorf("la elección de empresa no mandó la empresa elegida: %s", req.Body)
+	}
+	if req.Query.Has("tenant_id") || strings.Contains(req.Path, testOtherTenantID) {
+		t.Errorf("la empresa viajó fuera del cuerpo (query %q, ruta %q)", req.Query.Encode(), req.Path)
+	}
+
+	// Y es la ÚNICA de toda la superficie que lo hace.
+	conTenant := map[string]bool{}
+	for _, r := range api.Requests() {
+		if strings.Contains(r.Body, "tenant_id") {
+			conTenant[r.Route()] = true
+		}
+	}
+	if len(conTenant) != 1 || !conTenant[rutaEleccionDeEmpresa] {
+		rutas := make([]string, 0, len(conTenant))
+		for ruta := range conTenant {
+			rutas = append(rutas, ruta)
+		}
+		t.Errorf("mandan tenant_id en el cuerpo %v; la única excepción a INV-04 es %q", rutas, rutaEleccionDeEmpresa)
 	}
 }
 

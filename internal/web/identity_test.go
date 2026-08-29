@@ -103,19 +103,47 @@ func TestMiIdentificador_ElValorVaEnteroYEnUnCampoParaCopiar(t *testing.T) {
 	}
 }
 
-// TestMiIdentificador_NoHablaConLaAPI: es la pantalla a la que se manda a alguien cuando lo demás no
-// funciona, así que no puede tener un modo de fallo. El dato sale del token que la sesión ya
-// decodificó —el mismo valor que `whoami` devuelve en `subject`—, y por eso el viaje de red sobra.
-func TestMiIdentificador_NoHablaConLaAPI(t *testing.T) {
+// TestMiIdentificador_SoloPreguntaLoQueElTokenNoSabe.
+//
+// 🆕 ANTES SE LLAMABA `..._NoHablaConLaAPI` y afirmaba CERO llamadas. Dejó de ser cierto con T5.3 y
+// el aserto se ESTRECHA en vez de borrarse, porque lo que defendía sigue en pie: esta es la pantalla
+// a la que se manda a alguien cuando lo demás no funciona, así que no puede preguntar nada cuya
+// respuesta ya se sepa. El identificador sale del token —el mismo valor que `whoami` devuelve en
+// `subject`—, así que ese viaje sigue sobrando y sigue sin hacerse.
+//
+// Lo único que pregunta es el LISTADO DE EMPRESAS, y es la pregunta que el token no puede responder:
+// el de cero empresas y el de varias sin elegir son idénticos. Sin ella, esta pantalla le diría
+// «todavía no perteneces a ninguna empresa» a alguien que pertenece a dos.
+//
+// El positivo va al lado del negativo para que el negativo no sea vacuo: si el listado dejara de
+// pedirse, el negativo pasaría igual y el tercer estado se perdería sin que nada fallara.
+func TestMiIdentificador_SoloPreguntaLoQueElTokenNoSabe(t *testing.T) {
 	t.Parallel()
-	api := newStubAPI(t, map[string]stubResponse{})
+	api := newStubAPI(t, map[string]stubResponse{
+		rutaListadoDeEmpresas: {http.StatusOK, dosEmpresas()},
+	})
 
 	rec := getConCookie(adminRouter(api), "/mi-identificador", sessionCookieFor(t, testUserID, ""))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
-	if n := len(api.Requests()); n != 0 {
-		t.Errorf("la pantalla hizo %d llamadas a la API (%v); no debe hacer ninguna", n, routesOf(api.Requests()))
+	// POSITIVO: el listado SÍ se pide, que es lo que distingue «cero» de «varias sin elegir».
+	if !api.Called(rutaListadoDeEmpresas) {
+		t.Fatalf("la pantalla no pidió el listado de empresas; el negativo de abajo sería vacuo. Pidió: %v",
+			routesOf(api.Requests()))
+	}
+	// NEGATIVO: y nada más. Todo lo demás tiene la respuesta sabida de antemano.
+	if otras := llamadasSalvoElListado(api.Requests()); len(otras) != 0 {
+		t.Errorf("la pantalla hizo %d llamadas además del listado de empresas (%v); ninguna hace falta",
+			len(otras), otras)
+	}
+	// Y con DOS empresas deja de decir la frase que sería mentira.
+	out := rec.Body.String()
+	if strings.Contains(out, `id="nota-sin-empresa"`) {
+		t.Error("con dos empresas la pantalla sigue diciendo «todavía no perteneces a ninguna empresa»")
+	}
+	if !strings.Contains(out, `id="nota-elegir-empresa"`) {
+		t.Error("con dos empresas la pantalla no dice que falta elegir con cuál se entra")
 	}
 }
 
@@ -176,6 +204,8 @@ func TestSinEmpresa_MiembrosYRolesExplicanEnVezDeAcusarDeFaltaDePermiso(t *testi
 			"GET /api/v1/members":     {http.StatusOK, membersBody(testUserID)},
 			"GET /api/v1/roles":       {http.StatusOK, rolesBody},
 			"GET /api/v1/invitations": {http.StatusOK, invitacionesBody()},
+			// CERO empresas: la lista vacía es el estado de espera, y es 200 y no 404 (D-056.12).
+			rutaListadoDeEmpresas: {http.StatusOK, tenantsBody()},
 		})
 		rec := getConCookie(adminRouter(api), ruta, sessionCookieFor(t, testUserID, ""))
 
@@ -189,8 +219,14 @@ func TestSinEmpresa_MiembrosYRolesExplicanEnVezDeAcusarDeFaltaDePermiso(t *testi
 		if strings.Contains(out, "no tiene permiso") || strings.Contains(out, "no tienes permiso") {
 			t.Errorf("%s acusa de falta de permiso a quien lo que no tiene es empresa", ruta)
 		}
-		if n := len(api.Requests()); n != 0 {
-			t.Errorf("%s sin empresa hizo %d llamadas (%v); la respuesta ya se sabe", ruta, n, routesOf(api.Requests()))
+		// 🆕 El listado de empresas SÍ se pide —es la única llamada cuya respuesta no se sabe, y la
+		// que decide si esta pantalla es la de espera o el selector (T5.3)—; el resto, no.
+		if !api.Called(rutaListadoDeEmpresas) {
+			t.Errorf("%s no pidió el listado de empresas: no puede distinguir «cero» de «varias sin elegir»", ruta)
+		}
+		if otras := llamadasSalvoElListado(api.Requests()); len(otras) != 0 {
+			t.Errorf("%s sin empresa hizo %d llamadas además del listado (%v); su respuesta ya se sabe",
+				ruta, len(otras), otras)
 		}
 		// Los DOS caminos que sacan de este estado: pegar la invitación (la vía de la Ola A) y, para
 		// quien no tenga ninguna, su identificador.

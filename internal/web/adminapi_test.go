@@ -159,6 +159,69 @@ const (
 	testOtherSession = "s-2222"
 )
 
+// --- El listado de empresas del sujeto (T5.3) ---
+
+// rutaListadoDeEmpresas es la ruta del listado, escrita UNA vez porque la nombran media docena de
+// tests: los que la esperan y los que afirman que es la única excepción a «sin empresa no se llama».
+const rutaListadoDeEmpresas = "GET /api/v1/auth/tenants"
+
+// Las dos empresas de prueba. La de la sesión (testTenantID, server_test.go) tiene nombre propio; la
+// otra existe para el caso VARIAS.
+//
+// 🔴 EL ORDEN IMPORTA en los cuerpos de abajo: la ACTIVA se sirve la SEGUNDA a propósito. Un selector
+// que marcara «la primera» en vez de la que el servidor dice que está activa pasaría todos los tests
+// si la activa fuera siempre la primera, y esa es exactamente la mutación que hay que poder cazar.
+const (
+	testTenantName      = "Panadería Doña Rosa"
+	testOtherTenantID   = "33333333-3333-4333-8333-333333333333"
+	testOtherTenantName = "Catering del Sur"
+)
+
+// empresaJSON arma UNA empresa del listado.
+func empresaJSON(id, nombre string, activa bool) string {
+	activo := "false"
+	if activa {
+		activo = "true"
+	}
+	return `{"id":"` + id + `","display_name":"` + nombre + `","active":` + activo + `}`
+}
+
+// tenantsBody arma la respuesta de GET /api/v1/auth/tenants a partir de las filas dadas. Sin filas
+// devuelve `{"tenants":[]}`, que es el CERO empresas del contrato: lista vacía, nunca null.
+func tenantsBody(filas ...string) string {
+	return `{"tenants":[` + strings.Join(filas, ",") + `]}`
+}
+
+// unaEmpresa es el mundo de siempre: la persona pertenece SOLO a la empresa de su token.
+func unaEmpresa() string { return tenantsBody(empresaJSON(testTenantID, testTenantName, true)) }
+
+// dosEmpresas es el mundo de la Ola 5. La activa —la del token— va la SEGUNDA (ver arriba).
+func dosEmpresas() string {
+	return tenantsBody(
+		empresaJSON(testOtherTenantID, testOtherTenantName, false),
+		empresaJSON(testTenantID, testTenantName, true),
+	)
+}
+
+// llamadasSalvoElListado devuelve las rutas llamadas quitando el listado de empresas.
+//
+// Existe porque «sin empresa no se llama a nada» dejó de ser cierto con T5.3, y la forma correcta de
+// arreglarlo NO es borrar ese aserto: es estrecharlo. Lo que aquellos tests defienden es que no se
+// llame a lo que YA SE SABE que va a fallar (members y roles dan 403, entitlements da 401). El
+// listado de empresas es lo contrario: es la única llamada que una sesión sin empresa PUEDE hacer, y
+// la única que responde la pregunta que el token no puede responder —cero empresas o varias sin
+// elegir—. Por eso se exceptúa por su nombre, y solo ella.
+func llamadasSalvoElListado(reqs []capturedRequest) []string {
+	out := make([]string, 0, len(reqs))
+	for _, r := range reqs {
+		if r.Route() == rutaListadoDeEmpresas {
+			continue
+		}
+		out = append(out, r.Route())
+	}
+	return out
+}
+
 // entitlementsBody arma la respuesta de GET /api/v1/entitlements.
 func entitlementsBody(plan string, features ...string) string {
 	quoted := make([]string, 0, len(features))

@@ -13,18 +13,19 @@
         {{ template "flashes" . }}
 
         {{/*
-        La empresa se pinta como DATO, no como control, y aquí NO HAY SELECTOR DE EMPRESAS.
-
-        Hoy una sesión tiene exactamente una: el canje del token falla con ErrMultipleTenants si la
-        persona pertenece a más de una (MD-055.2), así que un selector no tendría entre qué elegir y
-        ofrecerlo sería prometer un cambio que la sesión no puede hacer. El día que el canje sepa
-        elegir empresa, el control aparece justo aquí.
+        🆕 La empresa se pinta como DATO —por su NOMBRE, con el identificador completo en el `title`
+        para copiarlo— y el CONTROL para cambiarla NO está aquí: está en la barra de arriba
+        (layouts/base.html), que es el único sitio que cubre las seis pantallas de una vez. Esta
+        plantilla prometía lo contrario desde T1.4a («el día que el canje sepa elegir empresa, el
+        control aparece justo aquí») y ese día llegó con la Ola 5: cambiar de empresa es navegación,
+        como cerrar sesión, y meterlo en una sola de las siete pantallas habría dejado a quien está
+        mirando /sesiones sin forma de cambiar sin volver aquí.
 
         El <select> que sí hay en esta pantalla es el del ROL en el alta, y es de otra cosa.
         */}}
         <dl class="session-facts">
             <dt class="session-facts__term">Empresa</dt>
-            <dd class="session-facts__value" id="tenant-actual">{{ .TenantID }}</dd>
+            <dd class="session-facts__value" id="tenant-actual" title="{{ .TenantID }}">{{ .TenantName }}</dd>
         </dl>
 
         <p class="section-note" id="nota-identidad">

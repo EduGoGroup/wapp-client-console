@@ -612,7 +612,11 @@ func TestSesiones_UnA401QueSobreviveAlRefrescoExpulsaALogin(t *testing.T) {
 // se sabe, así que ni se pregunta.
 func TestSesiones_SinEmpresaExplicaEnVezDeLlamar(t *testing.T) {
 	t.Parallel()
-	api := newStubAPI(t, sessionsOK())
+	rutas := sessionsOK()
+	// CERO empresas: lista vacía, que es 200 y no 404 (D-056.12). Con ella esta pantalla sabe que
+	// toca la espera y no el selector (T5.3).
+	rutas[rutaListadoDeEmpresas] = stubResponse{http.StatusOK, tenantsBody()}
+	api := newStubAPI(t, rutas)
 
 	rec := getConCookie(adminRouter(api), "/sesiones", sessionCookieFor(t, testUserID, ""))
 	if rec.Code != http.StatusOK {
@@ -625,8 +629,13 @@ func TestSesiones_SinEmpresaExplicaEnVezDeLlamar(t *testing.T) {
 	if strings.Contains(out, "no tiene permiso") || strings.Contains(out, "no tienes permiso") {
 		t.Error("se acusa de falta de permiso a quien lo que no tiene es empresa")
 	}
-	if n := len(api.Requests()); n != 0 {
-		t.Errorf("sin empresa se hicieron %d llamadas (%v); la respuesta ya se sabe", n, routesOf(api.Requests()))
+	// 🆕 El listado de empresas SÍ se pide; el resto, no (T5.3, ver llamadasSalvoElListado).
+	if !api.Called(rutaListadoDeEmpresas) {
+		t.Error("no se pidió el listado de empresas: la pantalla no puede distinguir «cero» de «varias sin elegir»")
+	}
+	if otras := llamadasSalvoElListado(api.Requests()); len(otras) != 0 {
+		t.Errorf("sin empresa se hicieron %d llamadas además del listado (%v); su respuesta ya se sabe",
+			len(otras), otras)
 	}
 }
 

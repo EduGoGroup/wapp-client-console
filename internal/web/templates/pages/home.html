@@ -11,9 +11,15 @@
 
         {{ template "flashes" . }}
 
+        {{/*
+        La empresa se pinta por su NOMBRE y deja el identificador completo en el `title`, igual que la
+        tabla de miembros hace con las personas: un UUID crudo no le dice nada a quien lo lee y sigue
+        haciendo falta para copiarlo. Si el listado de empresas no se pudo leer, `TenantName` cae al
+        propio identificador: se pierde legibilidad, no el dato.
+        */}}
         <dl class="session-facts">
             <dt class="session-facts__term">Empresa</dt>
-            <dd class="session-facts__value" id="tenant-actual">{{ .TenantID }}</dd>
+            <dd class="session-facts__value" id="tenant-actual" title="{{ .TenantID }}">{{ .TenantName }}</dd>
 
             <dt class="session-facts__term">Usuario</dt>
             <dd class="session-facts__value">{{ .UserID }}</dd>

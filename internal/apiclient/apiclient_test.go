@@ -283,6 +283,13 @@ func TestPeticiones_LlevanElTokenYNoLaEmpresa(t *testing.T) {
 			_, err := c.Entitlements.Get(context.Background(), tokenDePrueba)
 			return err
 		},
+		// El LISTADO de empresas sí entra en la tabla: lee las del sujeto y no le pasa ninguna. La
+		// que NO entra es `tenants.set_active`, que es la excepción declarada a INV-04 y tiene su
+		// test hermano justo debajo de este.
+		"tenants.list": func(c *Client) error {
+			_, err := c.Tenants.List(context.Background(), tokenDePrueba)
+			return err
+		},
 	}
 
 	for nombre, llamada := range llamadas {
@@ -294,6 +301,92 @@ func TestPeticiones_LlevanElTokenYNoLaEmpresa(t *testing.T) {
 		if ultima.URL.Query().Has("tenant_id") {
 			t.Errorf("%s: manda tenant_id en la query", nombre)
 		}
+	}
+}
+
+// TestTenants_SetActiveEsLaEXCEPCION_YMandaLaEmpresaEnElCUERPO.
+//
+// 🔴 El hermano POSITIVO de la tabla de arriba, y va aquí y no dentro de ella porque metido ahí la
+// rompería: esta llamada SÍ manda un `tenant_id`, y tiene que mandarlo. Sin este test la excepción
+// se apagaría sola —el día que dejara de mandarlo, la tabla de arriba seguiría en verde y el
+// selector no cambiaría de empresa—.
+//
+// El porqué de la excepción está en tenants.go: aceptar el tenant AQUÍ, una vez y en una acción
+// deliberada, es lo que permite que el CANJE no lo acepte nunca (INV-8) — y el canje se repite solo
+// cada pocos minutos sin nadie delante.
+func TestTenants_SetActiveEsLaEXCEPCION_YMandaLaEmpresaEnElCUERPO(t *testing.T) {
+	t.Parallel()
+
+	const empresa = "33333333-3333-4333-8333-333333333333"
+	var cuerpo, ruta, metodo, uri string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		cuerpo, ruta, metodo, uri = string(raw), r.URL.Path, r.Method, r.URL.RequestURI()
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(srv.Close)
+
+	if err := New(srv.URL, 5*time.Second).Tenants.SetActive(context.Background(), tokenDePrueba, empresa); err != nil {
+		t.Fatalf("SetActive devolvió error con un 204: %v", err)
+	}
+	if !strings.Contains(cuerpo, `"tenant_id":"`+empresa+`"`) {
+		t.Errorf("el cuerpo no lleva la empresa elegida: %s", cuerpo)
+	}
+	if ruta != "/api/v1/auth/active-tenant" || metodo != http.MethodPost {
+		t.Errorf("la elección fue a %s %s, want POST /api/v1/auth/active-tenant", metodo, ruta)
+	}
+	// Y en NINGÚN otro sitio: la empresa va en el cuerpo, no en la ruta ni en la query.
+	if strings.Contains(uri, empresa) {
+		t.Errorf("la empresa también viajó en la URL: %s", uri)
+	}
+}
+
+// TestTenants_ElListadoNuncaEsNIL: cero empresas es `[]`, no `null`, y el cliente lo garantiza aunque
+// el servidor mandara `null`. Quien lo consume cuenta elementos para decidir si pinta el selector, y
+// tener que distinguir dos formas del mismo hecho es por donde entra un `nil` mal contado.
+func TestTenants_ElListadoNuncaEsNIL(t *testing.T) {
+	t.Parallel()
+
+	for nombre, cuerpo := range map[string]string{
+		"lista vacía": `{"tenants":[]}`,
+		"clave nula":  `{"tenants":null}`,
+		"sin clave":   `{}`,
+	} {
+		api, _ := servidorQueResponde(t, http.StatusOK, cuerpo)
+		empresas, err := api.Tenants.List(context.Background(), tokenDePrueba)
+		if err != nil {
+			t.Fatalf("%s: List devolvió error: %v", nombre, err)
+		}
+		if empresas == nil {
+			t.Errorf("%s: List devolvió nil en vez de una lista vacía", nombre)
+		}
+		if len(empresas) != 0 {
+			t.Errorf("%s: List devolvió %d empresas, want 0", nombre, len(empresas))
+		}
+	}
+}
+
+// TestTenants_ElListadoConservaElORDENyElACTIVO del servidor: el `active` lo calcula la plataforma
+// con la misma regla que acota el token en el canje, así que el cliente lo transporta y no lo
+// recalcula. Deducirlo aquí sería una segunda fuente del mismo hecho.
+func TestTenants_ElListadoConservaElORDENyElACTIVO(t *testing.T) {
+	t.Parallel()
+	api, _ := servidorQueResponde(t, http.StatusOK,
+		`{"tenants":[{"id":"a","display_name":"Primera","active":false},`+
+			`{"id":"b","display_name":"Segunda","active":true}]}`)
+
+	empresas, err := api.Tenants.List(context.Background(), tokenDePrueba)
+	if err != nil {
+		t.Fatalf("List devolvió error: %v", err)
+	}
+	if len(empresas) != 2 || empresas[0].ID != "a" || empresas[1].ID != "b" {
+		t.Fatalf("el orden del servidor no se conservó: %+v", empresas)
+	}
+	if empresas[0].Active || !empresas[1].Active {
+		t.Errorf("el `active` no se transportó tal cual: %+v", empresas)
+	}
+	if empresas[1].DisplayName != "Segunda" {
+		t.Errorf("el nombre no se decodificó: %+v", empresas[1])
 	}
 }
 

@@ -22,15 +22,29 @@
                    value="{{ .UserID }}" readonly autocomplete="off" spellcheck="false">
         </div>
 
+        {{/*
+        🆕 Esta pantalla NO invoca el parcial `sin_empresa` —escribe su propio texto, y el parcial lo
+        deja anotado—, así que el tercer estado de T5.3 hay que repartirlo también aquí o esta
+        pantalla le diría «todavía no perteneces a ninguna empresa» a alguien que pertenece a DOS.
+        No se pinta el selector: la elección se hace donde está el resto del contexto (la portada), y
+        duplicar aquí el formulario sería un segundo sitio donde el mismo control se desincroniza.
+        */}}
         {{ if .SinEmpresa }}
+        {{ if .Tenants }}
+        <p class="section-note" id="nota-elegir-empresa">
+            Perteneces a más de una empresa y todavía no has elegido con cuál entras. Hazlo desde
+            <a href="/">la portada</a> y aquí verás el negocio que hayas elegido.
+        </p>
+        {{ else }}
         <p class="section-note" id="nota-sin-empresa">
             Todavía no perteneces a ninguna empresa. En cuanto quien la administra te dé acceso con
             este identificador, verás aquí tu negocio.
         </p>
+        {{ end }}
         {{ else }}
         <dl class="session-facts">
             <dt class="session-facts__term">Tu empresa</dt>
-            <dd class="session-facts__value" id="tenant-actual">{{ .TenantID }}</dd>
+            <dd class="session-facts__value" id="tenant-actual" title="{{ .TenantID }}">{{ .TenantName }}</dd>
         </dl>
         {{ end }}
     </div>

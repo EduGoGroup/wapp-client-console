@@ -39,17 +39,49 @@ func NewAdminHandler(auth *AuthHandler, api *apiclient.Client, cfg *config.Confi
 }
 
 // pageData arma los datos comunes de toda pantalla de administración: título, avisos del catálogo de
-// flash y la EMPRESA de la sesión.
+// flash y la EMPRESA de la sesión —cuál es, cómo se llama y entre cuáles se puede elegir—.
 //
-// La empresa va como DATO y no como control (ver la plantilla): hoy una sesión tiene exactamente una
-// —el canje falla con ErrMultipleTenants si la persona pertenece a más de una, MD-055.2—, así que un
-// selector no tendría entre qué elegir. Cuando el canje sepa elegir, el sitio donde aparecerá el
-// control es este.
+// 🔴 HACE UNA LLAMADA DE RED, y hasta T5.3 no hacía ninguna. El coste elegido, dicho sin rebajarlo:
+// UN `GET /api/v1/auth/tenants` más por cada render autenticado, es decir en las SEIS pantallas con
+// sesión. No lo pagan ni /login, ni /logout, ni la sonda, ni los estáticos —que es justo lo que
+// evita el middleware y por lo que los entitlements se resuelven en su handler (home_handler.go)—,
+// ni ningún POST: pageData solo lo llaman los seis GET que pintan.
+//
+// Por qué se paga ahí y no en un handler suelto, con el código delante:
+//   - No es un adorno de una pantalla: DECIDE QUÉ PANTALLA ES. Cinco de las seis pintan el parcial
+//     `sin_empresa`, y sin el listado no pueden distinguir «cero empresas» (espera) de «varias sin
+//     elegir» (selector) — los dos llegan con el MISMO token vacío. Esas cinco lo pagarían igual
+//     aunque el selector viviera en una sola pantalla.
+//   - El control tiene que estar donde está «Cerrar sesión»: en la barra, no dentro de una tabla.
+//     Un control de navegación que aparece en cinco pantallas y desaparece en la sexta se lee como
+//     un fallo.
+//   - Repetirlo en seis handlers costaría lo mismo y añadiría seis sitios donde olvidarlo.
+//
+// La sexta —«Mi identificador»— es la que más se pensó, porque su handler declara por escrito que NO
+// sale a la red y que añadirle un viaje sería darle un modo de fallo a lo único que nunca debe
+// fallar. Ese argumento se sostenía sobre una premisa que aquí NO se cumple: decía que el viaje «no
+// compraría un dato distinto, solo una forma de no tenerlo», y era cierto para `whoami` porque el
+// identificador ya viene en el token. El listado de empresas NO viene en el token y no puede venir
+// —el de cero empresas y el de varias sin elegir son idénticos—, así que sí compra un dato que no se
+// tiene de otra forma: sin él, esa pantalla le dice «todavía no perteneces a ninguna empresa» a
+// alguien que pertenece a dos. Se paga el viaje y se conserva la garantía por el otro lado:
+// resolveTenants NUNCA falla la página, así que el identificador se pinta igual con la plataforma
+// caída. Ver ShowMyIdentifier, cuyo comentario se corrigió con este cambio y no después.
 func (h *AdminHandler) pageData(c *gin.Context, title string) gin.H {
+	tenantID := webgin.TenantIDFromContext(c)
+	empresas := resolveTenants(c, h.auth, h.api)
 	return gin.H{
-		"Title":      title,
-		"Subtitle":   "Consola del cliente",
-		"TenantID":   webgin.TenantIDFromContext(c),
+		"Title":    title,
+		"Subtitle": "Consola del cliente",
+		"TenantID": tenantID,
+		// TenantName es el nombre legible de la empresa del token, y cae al propio identificador si
+		// el listado no se resolvió. Las pantallas lo pintan como TEXTO y dejan el identificador
+		// completo en el `title`, igual que la tabla de miembros hace con las personas: se gana
+		// legibilidad sin perder el dato que hay que copiar.
+		"TenantName": nombreDeLaEmpresa(empresas, tenantID),
+		// Tenants son las empresas entre las que ESTE usuario puede elegir. Vacía cuando no se pudo
+		// preguntar, y entonces no se pinta ningún selector: se falla hacia lo que ya había.
+		"Tenants":    empresas,
 		"UserID":     webgin.UserIDFromContext(c),
 		"SinEmpresa": sinEmpresa(c),
 		"Error":      flashError(c.Query("error")),
@@ -57,7 +89,14 @@ func (h *AdminHandler) pageData(c *gin.Context, title string) gin.H {
 	}
 }
 
-// sinEmpresa dice si la sesión NO tiene empresa todavía.
+// sinEmpresa dice si la sesión NO tiene empresa ACTIVA.
+//
+// 🆕 🔴 NO ES UN SOLO ESTADO, y creerlo era la suposición que T5.3 vino a romper: aquí caen tanto
+// quien no pertenece a ninguna empresa como quien pertenece a VARIAS y no ha elegido con cuál entra.
+// Los dos tokens son idénticos —sin tenant y sin grants—, así que esta función no puede separarlos y
+// no lo intenta: quien decide qué se pinta es el LISTADO (`.Tenants` en pageData, resolveTenants),
+// y el reparto vive en el parcial `sin_empresa`. Lo que esta función sigue respondiendo es lo único
+// que el token sabe: si hay empresa acotada o no.
 //
 // 🔴 Es un ESTADO NORMAL, no un fallo, y esta consola tenía la suposición contraria metida en tres
 // sitios. Quien se registra y entra antes de que nadie lo incorpore a una empresa recibe un Context

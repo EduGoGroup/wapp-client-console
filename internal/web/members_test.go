@@ -15,7 +15,18 @@ func membersOK() map[string]stubResponse {
 		"GET /api/v1/roles":                    {http.StatusOK, rolesBody},
 		"GET /api/v1/entitlements":             {http.StatusOK, entitlementsBody("commerce", "menu", "catalog_import")},
 		"POST /api/v1/members/{user_id}/roles": {http.StatusNoContent, ""},
+		// UNA empresa: el mundo de siempre. Se sirve DE VERDAD —y no se deja que la llamada falle—
+		// para que «aquí no hay selector» sea una decisión observable y no el efecto de un listado
+		// que no se pudo leer, que es la forma en que ese negativo se volvería vacuo.
+		rutaListadoDeEmpresas: {http.StatusOK, unaEmpresa()},
 	}
+}
+
+// membersConDosEmpresas es membersOK con la persona en DOS empresas: el mundo de la Ola 5.
+func membersConDosEmpresas() map[string]stubResponse {
+	rutas := membersOK()
+	rutas[rutaListadoDeEmpresas] = stubResponse{http.StatusOK, dosEmpresas()}
+	return rutas
 }
 
 // TestMiembros_PintaLaIdentidadQueHayYDiceDeDondeSaleElNombre (T1.4a).
@@ -76,45 +87,101 @@ func TestMiembros_MarcaAlUsuarioDeLaSesionYNoLeOfreceDarseDeBaja(t *testing.T) {
 	}
 }
 
-// TestMiembros_LaEmpresaEsUnDatoYNoHaySelector (T1.4a, criterio de la ola).
+// TestMiembros_ElSelectorDeEmpresaAparecePorCARDINALIDAD (T5.3, criterio de la ola).
 //
-// Con UNA sola empresa —el único caso posible hoy, porque el canje falla con ErrMultipleTenants si la
-// persona pertenece a más de una (MD-055.2)— NO se pinta selector DE EMPRESA.
+// 🆕 ESTE TEST CAMBIÓ DE SENTIDO Y NO SE BORRÓ. Era `TestMiembros_LaEmpresaEsUnDatoYNoHaySelector` y
+// afirmaba que aquí NO hay selector de empresa, porque el canje fallaba con ErrMultipleTenants si la
+// persona pertenecía a más de una (MD-055.2). La Ola 5 abrió ese cerrojo, así que la mitad negativa
+// deja de valer para todo el mundo y pasa a valer para UN caso: quien tiene UNA sola empresa. La
+// mitad positiva —el selector CON DOS— es nueva. Borrarlo habría dejado el ecosistema sin vigilar
+// ninguno de los dos.
 //
-// ⚠️ El aserto era «esta pantalla no tiene ningún <select>» y dejó de valer con el alta (T1.2), que
-// trae uno legítimo: el del rol opcional. Aquello era una BROCHA —funcionaba solo mientras la
-// pantalla no tuviera desplegables por otro motivo—, así que se estrecha a lo que el criterio dice
-// de verdad, y se aprieta: se cuenta cuántos hay y se afirma que el único es el del rol. Un selector
-// de empresa nuevo ya no se cuela ni aunque alguien lo llame de otra forma.
+// 🔴 EL GATE ES POR CARDINALIDAD, NO POR FEATURE. Se pinta cuando hay más de una empresa entre las
+// que elegir, y no detrás de `Entitlements.Has "multi_empresa"`: los entitlements solo se resuelven
+// en la portada —aquí el gate cerraría siempre— y, sobre todo, quien ya está en dos empresas ya está
+// en dos; esconderle el control no lo deshace, solo lo deja atrapado en una.
 //
-// El negativo se ancla junto a sus gemelos positivos, que es lo que lo hace no vacuo:
-//  1. la empresa SÍ se pinta, como dato de solo lectura en `id="tenant-actual"` — si alguien
-//     convirtiera ese bloque en un control, el positivo seguiría verde y el negativo caería;
-//  2. esta pantalla SÍ sabe pintar un `<select>` —el del rol—, así que «aquí no hay uno de empresa»
+// 🔴 Y EL NEGATIVO YA NO ES UN CONTEO DE `<select>`. Antes era `strings.Count(html, "<select") != 1`,
+// que ya se había tenido que estrechar UNA vez —cuando el alta trajo el desplegable del rol— y que
+// habría vuelto a romperse con el tercer desplegable que llegara, sin que nadie hubiera hecho nada
+// mal. Lo que el criterio dice de verdad no es «cuántos desplegables hay»: es «no hay ningún control
+// capaz de cambiar de empresa». Y eso tiene una firma exacta e independiente del número de
+// desplegables: para cambiar de empresa hay que hacer POST a `rutaEmpresa` con un campo `tenant_id`.
+// Un selector «llamado de otra forma» seguiría teniendo que hacer las dos cosas para funcionar, así
+// que el aserto las persigue a ellas y no al recuento. Un cuarto `<select>` de cualquier otra cosa
+// ya no puede romper este test.
+//
+// Los dos positivos anti-vacuidad de la versión anterior se conservan intactos en su intención:
+//  1. la empresa SÍ se pinta como dato —ahora por su NOMBRE, con el identificador completo en el
+//     `title`, que es lo que impide que el aserto del UUID se quede sin nada que probar—;
+//  2. esta pantalla SÍ sabe pintar un `<select>` (el del rol), así que «aquí no hay uno de empresa»
 //     es una decisión observable y no la ausencia de una capacidad que no existe.
-func TestMiembros_LaEmpresaEsUnDatoYNoHaySelector(t *testing.T) {
+func TestMiembros_ElSelectorDeEmpresaAparecePorCARDINALIDAD(t *testing.T) {
 	t.Parallel()
-	api := newStubAPI(t, membersOK())
 
-	miembros := getWithSession(t, adminRouter(api), "/miembros").Body.String()
+	t.Run("con UNA empresa no hay forma de cambiar de empresa", func(t *testing.T) {
+		t.Parallel()
+		api := newStubAPI(t, membersOK())
+		miembros := getWithSession(t, adminRouter(api), "/miembros").Body.String()
 
-	// Positivo 1: la empresa está en la pantalla, como dato.
-	if !strings.Contains(miembros, `id="tenant-actual"`) || !strings.Contains(miembros, testTenantID) {
-		t.Fatal("la pantalla no pinta la empresa de la sesión: el negativo de abajo sería vacuo")
-	}
-	// Positivo 2: la pantalla sabe pintar un desplegable, y lo hace.
-	if !strings.Contains(miembros, `name="role_id"`) {
-		t.Fatal("la pantalla no pinta el <select> de rol: el negativo de abajo sería vacuo")
-	}
+		// Positivo 1: la empresa está en la pantalla, como dato, y con las DOS mitades — el nombre
+		// legible, que es lo que se lee, y el identificador COMPLETO en el `title`, que es lo que se
+		// copia. Sustituir uno por el otro habría vaciado este aserto.
+		if !strings.Contains(miembros, `id="tenant-actual"`) {
+			t.Fatal("la pantalla no pinta la empresa de la sesión: el negativo de abajo sería vacuo")
+		}
+		if !strings.Contains(miembros, `title="`+testTenantID+`"`) {
+			t.Fatalf("el identificador completo de la empresa (%s) ya no está en el HTML: se perdió el dato que se copia",
+				testTenantID)
+		}
+		if !strings.Contains(miembros, testTenantName) {
+			t.Errorf("la empresa se sigue pintando sin su nombre (%q): el UUID crudo no le dice nada a quien lo lee",
+				testTenantName)
+		}
+		// Positivo 2: la pantalla sabe pintar un desplegable, y lo hace.
+		if !strings.Contains(miembros, `name="role_id"`) {
+			t.Fatal("la pantalla no pinta el <select> de rol: el negativo de abajo sería vacuo")
+		}
 
-	// Negativo: el ÚNICO desplegable es el del rol. Cualquier otro es un selector que no debería
-	// estar, y con una sola empresa el candidato evidente es el de empresa.
-	if n := strings.Count(miembros, "<select"); n != 1 {
-		t.Errorf("la pantalla pinta %d <select>, want 1 (solo el del rol del alta)", n)
-	}
-	if strings.Contains(miembros, `name="tenant_id"`) || strings.Contains(miembros, `id="tenant-switcher"`) {
-		t.Error("la pantalla de miembros ofrece cambiar de empresa; hoy el canje no sabe elegir (MD-055.2)")
-	}
+		// NEGATIVO: no hay NINGÚN control capaz de cambiar de empresa. Los tres rastros que
+		// cualquiera de ellos dejaría, se llame como se llame.
+		for _, rastro := range []string{`name="tenant_id"`, `id="tenant-switcher"`, `action="` + rutaEmpresa + `"`} {
+			if strings.Contains(miembros, rastro) {
+				t.Errorf("con UNA sola empresa la pantalla ofrece cambiar de empresa (%s): no hay entre qué elegir", rastro)
+			}
+		}
+	})
+
+	t.Run("con DOS empresas el selector está", func(t *testing.T) {
+		t.Parallel()
+		api := newStubAPI(t, membersConDosEmpresas())
+		miembros := getWithSession(t, adminRouter(api), "/miembros").Body.String()
+
+		// Los MISMOS tres rastros, ahora exigidos. Es el mismo fixture con UNA variable cambiada, que
+		// es lo que hace que el negativo de arriba signifique algo.
+		for _, rastro := range []string{`name="tenant_id"`, `id="tenant-switcher"`, `action="` + rutaEmpresa + `"`} {
+			if !strings.Contains(miembros, rastro) {
+				t.Errorf("con DOS empresas falta el selector (%s)", rastro)
+			}
+		}
+		// Y ofrece las dos, con la ACTIVA marcada. `selected` tiene que caer en la del token, no en
+		// la primera de la lista: aquí la activa se sirve la SEGUNDA justo para que «marca siempre la
+		// primera» no pueda pasar.
+		if !strings.Contains(miembros, testOtherTenantName) {
+			t.Errorf("el selector no ofrece la otra empresa (%q)", testOtherTenantName)
+		}
+		if !strings.Contains(miembros, `<option value="`+testTenantID+`" selected>`) {
+			t.Errorf("la empresa ACTIVA (%s) no está marcada como seleccionada", testTenantID)
+		}
+		if strings.Contains(miembros, `<option value="`+testOtherTenantID+`" selected>`) {
+			t.Errorf("está marcada como activa una empresa que el servidor NO marcó (%s)", testOtherTenantID)
+		}
+		// 🔴 Y sigue siendo un FORMULARIO, no un `<select onchange>`: la CSP de esta consola no
+		// admite JavaScript en línea (ver security_test.go).
+		if strings.Contains(strings.ToLower(miembros), "onchange") {
+			t.Error("el selector usa un manejador en línea; la CSP lo descarta y el cambio no ocurriría")
+		}
+	})
 }
 
 // TestMiembros_LaBajaLlamaAlDeleteDeLaAPI (T1.4a): el formulario POST de la consola se traduce en el

@@ -1,10 +1,17 @@
 // Package apiclient habla con la API PÚBLICA de la plataforma (:8103 /api/v1) en nombre del
 // administrador del tenant que tiene la sesión abierta en la consola.
 //
-// 🔴 INV-04 — el tenant NO viaja nunca. Ni en el cuerpo, ni en la query, ni en la ruta: la empresa
-// sale del Context Token que la plataforma verifica en cada llamada. Ese es el motivo de que ningún
-// método de este paquete acepte un `tenantID`: no hay dónde ponerlo por error, porque no existe el
-// parámetro. Hay un test que lo afirma POR EL CABLE, inspeccionando la petición saliente.
+// 🔴 INV-04 — el tenant NO viaja. Ni en el cuerpo, ni en la query, ni en la ruta: la empresa sale del
+// Context Token que la plataforma verifica en cada llamada, y por eso los métodos de este paquete no
+// aceptan un `tenantID` — no hay dónde ponerlo por error, porque no existe el parámetro. Hay un test
+// que lo afirma POR EL CABLE, inspeccionando la petición saliente.
+//
+// 🆕 Y TIENE EXACTAMENTE UNA EXCEPCIÓN, declarada aquí para que no envejezca escondida:
+// `TenantsClient.SetActive` (POST /api/v1/auth/active-tenant), que sí acepta un `tenantID` y lo manda
+// en el cuerpo. Es la elección de empresa de quien pertenece a varias, y es lo que permite que el
+// CANJE no tenga que aceptar ninguna (INV-8): el porqué entero está en tenants.go, y la excepción va
+// con test HERMANO y aserto POSITIVO en internal/web/inv04_test.go. Una segunda excepción no se añade
+// sin pasar por ahí.
 //
 // 🔴 No hay —ni debe haber— un cliente del plano admin (:8100). Este paquete es el del perímetro del
 // CLIENTE (ver internal/config).
@@ -62,9 +69,15 @@ var (
 // ErrMemberOfAnotherTenant es el 409 del plano de MIEMBROS, y no es «ya está»: significa que esa
 // persona pertenece a otra empresa.
 //
-// La guarda es de MD-055.2 y no es una regla de administración: una segunda membresía rompe el canje
-// del token de esa persona (ErrMultipleTenants), así que añadirla no le daría una empresa más — le
-// quitaría el login. Se levanta cuando el canje sepa elegir empresa, no antes.
+// La guarda es de MD-055.2 y nació sin ser una regla de administración: mientras el canje no supo
+// elegir empresa, una segunda membresía le ROMPÍA el login a esa persona (ErrMultipleTenants), así
+// que añadirla no le daba una empresa más — se la quitaba.
+//
+// 🆕 Ese motivo ya no vale: el canje sabe elegir (Plan 047 · Ola 5, D-047.14) y esta consola tiene
+// selector. Lo que queda del 409 es una decisión COMERCIAL —el alta de una segunda empresa la honra
+// el entitlement `multi_empresa` (T5.2)—, así que el sentinela sigue existiendo y su texto sigue
+// siendo el mismo: lo que cambia es que ahora significa «tu plan no lo incluye», no «le romperías
+// el acceso».
 //
 // Envuelve a ErrConflict, así que quien solo quiera saber «hubo conflicto» sigue funcionando con
 // errors.Is(err, ErrConflict); quien quiera dar el mensaje exacto pregunta por este.

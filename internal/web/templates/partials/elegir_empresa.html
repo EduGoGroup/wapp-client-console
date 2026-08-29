@@ -1,0 +1,50 @@
+{{/*
+elegir_empresa es lo que ve quien pertenece a VARIAS empresas y todavía no ha elegido con cuál entra.
+
+🔴 ES EL TERCER ESTADO, y hasta T5.3 no existía: esta consola creía que una sesión sin empresa era
+una sola cosa. No lo es. El Context Token de quien tiene CERO empresas y el de quien tiene DOS y no
+ha elegido son IDÉNTICOS —los dos sin tenant y sin un solo grant—, así que la diferencia no sale del
+token: sale del listado (`.Tenants`). Quien reparte es el parcial `sin_empresa`, que delega aquí
+cuando hay algo entre lo que elegir y se pinta a sí mismo cuando no lo hay.
+
+Por qué no basta con el selector de la barra: la barra solo lo ofrece a quien YA tiene empresa activa
+(`{{ if .TenantID }}`), y esta persona no la tiene. Sin este bloque leería «todavía no perteneces a
+ninguna empresa» perteneciendo a dos, y no tendría desde dónde entrar en ninguna.
+
+El `id="tenant-switcher"` es el mismo de la barra a propósito —es el mismo control, en el sitio que
+toca según el estado— y no pueden coincidir en una página: las dos condiciones que los pintan son
+excluyentes.
+
+🔴 CERO JAVASCRIPT: formulario con su botón de enviar. La CSP no admite un `<select onchange>`.
+*/}}
+{{ define "elegir_empresa" }}
+<div class="wapp-card" id="section-elegir-empresa">
+    <h1 class="wapp-title">¿Con cuál de tus empresas entras?</h1>
+    <p class="wapp-subtitle">
+        Perteneces a más de una y todavía no has elegido. No es un error ni te falta ningún permiso:
+        wApp necesita saber de qué negocio son los datos que vas a ver.
+    </p>
+
+    {{ template "flashes" . }}
+
+    <form method="POST" action="/empresa" class="wapp-form-stack" id="form-elegir-empresa">
+        <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+        <div class="wapp-field">
+            <label class="wapp-field__label" for="tenant-switcher">Empresa</label>
+            <select class="wapp-field__control" id="tenant-switcher" name="tenant_id">
+                {{ range .Tenants }}
+                <option value="{{ .ID }}"{{ if .Active }} selected{{ end }}>{{ .Name }}</option>
+                {{ end }}
+            </select>
+        </div>
+        <div class="wapp-actions">
+            <button type="submit" class="wapp-btn wapp-btn--filled wapp-btn--auto">Entrar</button>
+        </div>
+    </form>
+
+    <p class="section-note" id="nota-cambiar-de-empresa">
+        Podrás cambiar de empresa cuando quieras desde la barra de arriba. Lo que veas en cada
+        pantalla será siempre de la empresa que tengas elegida, y solo de ella.
+    </p>
+</div>
+{{ end }}

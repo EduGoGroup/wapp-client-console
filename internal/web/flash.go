@@ -136,6 +136,23 @@ const (
 	// la forma más rápida de convencer a alguien de que el canje no funcionó.
 	flashJoinedRelogin = "joined_relogin"
 
+	// --- Desenlaces del SELECTOR DE EMPRESAS (T5.3) ---
+
+	// flashTenantNotYours traduce el 404 de POST /api/v1/auth/active-tenant.
+	//
+	// 🔴 El texto NO dice si esa empresa existe, y es lo único que importa de este código: el
+	// servidor responde igual a «no eres miembro» y a «no existe» para que nadie pueda sondear UUIDs
+	// y levantar el censo de empresas de la plataforma. Un mensaje que separase los dos casos
+	// desharía ese anti-oráculo desde la UI, que es donde más se lee.
+	flashTenantNotYours = "tenant_not_yours"
+	// flashTenantRelogin es el 204 con la sesión a medio actualizar: la empresa YA quedó elegida en
+	// el servidor, pero esta sesión sigue con el token que se emitió antes y el refresco que lo
+	// cambiaría falló.
+	//
+	// Vive entre los ERRORES por lo mismo que flashJoinedRelogin: pintarlo como éxito dejaría a la
+	// persona mirando los datos de la empresa ANTERIOR justo después de leer que ya cambió.
+	flashTenantRelogin = "tenant_relogin"
+
 	flashMemberAdded   = "member_added"
 	flashMemberRemoved = "member_removed"
 	flashRoleCreated   = "role_created"
@@ -160,6 +177,11 @@ const (
 	// flashInvitationAccepted es el 204 del canje CON la sesión ya actualizada. Es el único éxito de
 	// esta consola que lee alguien que no administra nada.
 	flashInvitationAccepted = "invitation_accepted"
+
+	// flashTenantSwitched es el acuse del cambio de empresa CON la sesión ya reemitida. No nombra la
+	// empresa elegida —el catálogo traduce códigos, no interpola datos—, y no le hace falta: la
+	// pantalla a la que redirige la tiene pintada arriba.
+	flashTenantSwitched = "tenant_switched"
 )
 
 // LA EMISIÓN NO TIENE CÓDIGO DE ÉXITO, y es deliberado: su acuse es el CÓDIGO en pantalla, que se
@@ -174,10 +196,11 @@ var (
 		flashSessionExpired: "Tu sesión caducó. Vuelve a entrar.",
 		flashNotInYourTenant: "Ese identificador no pertenece a tu empresa, o el rol no está disponible para ella. " +
 			"La plataforma no dice cuál de las dos cosas es, a propósito.",
-		flashForbidden:       "Tu usuario no tiene permiso para esta operación.",
-		flashInvalidInput:    "La plataforma rechazó los datos. Revisa lo que escribiste.",
-		flashConflict:        "Ya existe algo con ese nombre en tu empresa.",
-		flashMemberElsewhere: "Esa persona ya pertenece a otra empresa. Mientras el canje no sepa elegir empresa, una segunda membresía le quitaría el acceso en vez de dárselo.",
+		flashForbidden:    "Tu usuario no tiene permiso para esta operación.",
+		flashInvalidInput: "La plataforma rechazó los datos. Revisa lo que escribiste.",
+		flashConflict:     "Ya existe algo con ese nombre en tu empresa.",
+		flashMemberElsewhere: "Esa persona ya pertenece a otra empresa, y tu plan no incluye que alguien esté en varias a la vez. " +
+			"Habla con quien lleva la contratación si necesitas que también esté en la tuya.",
 		flashPersonUnknown: "Ese identificador no existe en wApp. Comprueba que lo has pegado entero: " +
 			"la persona tiene que registrarse primero y pasarte el suyo desde «Mi identificador».",
 		flashAddedWithoutRole: "La persona quedó incorporada a tu empresa, pero el rol NO se le pudo asignar: " +
@@ -207,6 +230,10 @@ var (
 			"Si crees que es un error, pídele una nueva a quien te la mandó.",
 		flashJoinedRelogin: "Ya formas parte de la empresa, pero esta sesión todavía no lo ve. Cierra sesión y " +
 			"vuelve a entrar y la tendrás.",
+		flashTenantNotYours: "No pudimos entrar en esa empresa. Elige una de las de tu lista: la consola no dice " +
+			"nada sobre las empresas que no son tuyas, a propósito.",
+		flashTenantRelogin: "La empresa quedó elegida, pero esta sesión todavía no lo ve. Cierra sesión y vuelve a " +
+			"entrar y estarás dentro de ella.",
 	})
 
 	flashSuccesses = sharedweb.NewFlashCatalog("Acción completada.", map[string]string{
@@ -224,6 +251,8 @@ var (
 		flashInvitationRevoked: "Invitación anulada. Quien tuviera ese código ya no puede usarlo; sigue en el " +
 			"listado para que veas cuál era.",
 		flashInvitationAccepted: "¡Listo! Ya formas parte de la empresa y puedes empezar a trabajar.",
+		flashTenantSwitched: "Estás en la empresa que elegiste. Todo lo que veas a partir de ahora —sesiones, " +
+			"miembros, roles e invitaciones— es de ella y solo de ella.",
 	})
 )
 

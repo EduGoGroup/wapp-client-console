@@ -170,6 +170,16 @@ func NewRouterWithLimiter(cfg *config.Config) (*gin.Engine, func()) {
 	// identificador). No llama a la API pública.
 	protected.GET("/mi-identificador", adminH.ShowMyIdentifier)
 
+	// El SELECTOR DE EMPRESAS (T5.3). Es un POST y no tiene GET propio: no hay «pantalla de elegir
+	// empresa» que listar, porque el control vive donde se necesita —en la barra, junto a «Cerrar
+	// sesión», para quien ya tiene una activa, y dentro del parcial `sin_empresa` para quien
+	// pertenece a varias y todavía no ha elegido—.
+	//
+	// Va en el grupo protegido y NO exige empresa, igual que el canje de una invitación y por la
+	// misma razón: quien llega aquí tiene varias membresías y ninguna elegida, así que su Context
+	// Token viene SIN tenant. Exigirle empresa sería exigirle justo lo que viene a conseguir.
+	protected.POST(rutaEmpresa, adminH.SelectTenant)
+
 	// Miembros (T1.4a) y su ALTA (T1.2).
 	//
 	// El alta es POST /miembros, simétrica con POST /roles: el formulario vive DENTRO de la pantalla

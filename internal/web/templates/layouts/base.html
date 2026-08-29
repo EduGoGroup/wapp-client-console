@@ -34,6 +34,36 @@
             <a href="/miembros" class="btn btn--text{{ if eq .CurrentPath "/miembros" }} btn--activo{{ end }}">Miembros</a>
             <a href="/invitaciones" class="btn btn--text{{ if eq .CurrentPath "/invitaciones" }} btn--activo{{ end }}">Invitaciones</a>
             <a href="/roles" class="btn btn--text{{ if eq .CurrentPath "/roles" }} btn--activo{{ end }}">Roles</a>
+            {{/*
+            El SELECTOR DE EMPRESAS (T5.3), y está aquí porque es el único punto que cubre las seis
+            pantallas de una vez: cambiar de empresa es navegación, como cerrar sesión, no una
+            operación de la tabla que se esté mirando.
+
+            🔴 GATEADO POR CARDINALIDAD Y NO POR FEATURE: se pinta cuando hay MÁS DE UNA empresa
+            entre las que elegir. Con una sola no habría entre qué elegir, y colgarlo de
+            `Entitlements.Has "multi_empresa"` sería peor por dos motivos: los entitlements solo se
+            resuelven en la portada —aquí no existirían y el gate cerraría siempre— y quien está en
+            dos empresas ya está en dos: esconderle el control no lo deshace, solo lo deja
+            atrapado en una.
+
+            🔴 CERO JAVASCRIPT: es un formulario con su botón, no un `<select onchange>`. La CSP de
+            esta consola no lleva 'unsafe-inline' y hay tests que vigilan que no entre un `<script>`.
+
+            El `id` es el mismo que usa el bloque de `elegir_empresa`, y no se duplican nunca: aquel
+            solo se pinta cuando NO hay empresa activa y éste solo cuando la hay.
+            */}}
+            {{ if gt (len .Tenants) 1 }}
+            <form method="POST" action="/empresa" class="app-bar__tenant-form">
+                <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+                <label class="app-bar__tenant-label" for="tenant-switcher">Empresa</label>
+                <select class="wapp-field__control app-bar__tenant-select" id="tenant-switcher" name="tenant_id">
+                    {{ range .Tenants }}
+                    <option value="{{ .ID }}"{{ if .Active }} selected{{ end }}>{{ .Name }}</option>
+                    {{ end }}
+                </select>
+                <button type="submit" class="btn btn--text">Cambiar</button>
+            </form>
+            {{ end }}
             {{ end }}
             <a href="/mi-identificador" class="btn btn--text{{ if eq .CurrentPath "/mi-identificador" }} btn--activo{{ end }}">Mi identificador</a>
             <form method="POST" action="/logout" class="app-bar__logout-form">

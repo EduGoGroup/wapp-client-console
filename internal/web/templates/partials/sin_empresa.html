@@ -27,6 +27,20 @@ los produjo. Las cuatro páginas pintan `flashes` en su OTRA rama —la de quien
 que no se duplica.
 */}}
 {{ define "sin_empresa" }}
+{{/*
+🆕 🔴 EL REPARTO DE T5.3, Y VA AQUÍ PORQUE AQUÍ CUBRE LAS CINCO PANTALLAS DE UNA VEZ. «Sin empresa» no
+es un estado, son dos: quien no pertenece a ninguna (lo de abajo, la espera con su canje) y quien
+pertenece a VARIAS y no ha elegido (`elegir_empresa`). Los dos llegan con el MISMO token vacío, así
+que la única forma de separarlos es el listado, y por eso la condición es sobre `.Tenants` y no sobre
+nada del token. Ponerlo en cada página habría sido escribir cinco veces la misma decisión — que es
+exactamente lo que este parcial existe para impedir.
+
+Si el listado no se pudo leer, `.Tenants` viene vacío y se pinta la espera de siempre: se falla hacia
+lo que ya había.
+*/}}
+{{ if .Tenants }}
+{{ template "elegir_empresa" . }}
+{{ else }}
 <div class="wapp-card" id="section-sin-empresa">
     <h1 class="wapp-title">Todavía no perteneces a ninguna empresa</h1>
     <p class="wapp-subtitle">
@@ -65,4 +79,5 @@ que no se duplica.
         <a class="link-list__link" href="/mi-identificador">Mi identificador</a>: cópialo y pásaselo.
     </p>
 </div>
+{{ end }}
 {{ end }}

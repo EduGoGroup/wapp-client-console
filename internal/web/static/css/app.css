@@ -89,6 +89,30 @@ body {
   display: inline;
 }
 
+/* --- Selector de empresas de la barra (T5.3) ---
+   Solo se pinta con MÁS DE UNA empresa. El `<select>` reutiliza `.wapp-field__control` del módulo
+   compartido y NO se le tocan los colores: ese componente ya pinta fondo y texto con el par
+   surface / on-surface, que se mueven juntos al cambiar de tema. Darle aquí un `color: inherit`
+   —el blanco de la barra— sobre el fondo claro del control sería el par mixto que ya ha mordido
+   cinco veces: legible en un tema e ilegible en el otro. Aquí solo se ajusta el TAMAÑO. */
+.app-bar__tenant-form {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wapp-space-2);
+}
+
+.app-bar__tenant-label {
+  font-size: 0.8rem;
+  opacity: 0.75;
+}
+
+.app-bar__tenant-select {
+  width: auto;
+  max-width: 14rem;
+  padding: var(--wapp-space-2);
+  font-size: 0.875rem;
+}
+
 /* --- Botón de texto de la barra (el `wapp-btn` compartido es de ancho completo) --- */
 .btn {
   display: inline-flex;
