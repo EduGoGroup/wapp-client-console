@@ -31,13 +31,30 @@ body {
   flex-direction: column;
 }
 
-/* --- Barra superior --- */
+/* --- Barra superior ---
+   🔴 LA BARRA FLUYE A VARIAS LÍNEAS, Y ESO ES EL ARREGLO, NO UN DETALLE. Con el selector de empresas
+   dentro (T5.3) la fila pedía ~1.204 px; a 1.154 px de viewport «Cerrar sesión» caía en 1.128..1.204,
+   o sea 50 px FUERA de la barra: estaba en el DOM y no se podía pulsar. Con dos empresas eso deja a
+   la persona sin forma de cerrar sesión desde la interfaz. Medido en el navegador, y el desbordamiento
+   empieza ya en 1.200 px.
+
+   Por qué FLUIR y no comprimir: los nombres de empresa los escribe el cliente, así que el ancho que
+   pide esta barra NO TIENE COTA CONOCIDA. Cualquier arreglo que reparta un ancho fijo entre piezas
+   fijas vuelve a romperse con el nombre siguiente. Al envolver, lo que sobra baja de línea y nada
+   queda nunca fuera del área visible.
+
+   `height` pasa a `min-height` PORQUE SI NO, NO SIRVE DE NADA: una altura fija de 64 px con
+   `flex-wrap: wrap` recorta la segunda línea, que es exactamente el defecto que se venía a arreglar.
+   El padding vertical es el que da aire cuando hay dos líneas; con una sola manda `min-height` y la
+   barra mide los 64 px de siempre (medido: 64 px hasta 1.400 px de viewport). */
 .app-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 var(--wapp-space-6);
-  height: 64px;
+  flex-wrap: wrap;
+  row-gap: var(--wapp-space-2);
+  padding: var(--wapp-space-2) var(--wapp-space-6);
+  min-height: 64px;
   background-color: var(--wapp-app-header-bg, #004D46);
   color: var(--wapp-app-header-fg, #FFFFFF);
   box-shadow: var(--wapp-shadow-1);
@@ -79,9 +96,14 @@ body {
   opacity: 0.75;
 }
 
+/* La navegación envuelve POR SEPARADO de la barra, y hace falta: envolver solo `.app-bar` reparte
+   marca y navegación en dos líneas y arregla la franja 1.200 → ~790 px, pero por debajo de ahí la
+   navegación entera sigue sin caber en una línea (medido: 329 px de desbordamiento a 768 px con la
+   barra ya envolviendo). Son dos contenedores flex encadenados y cada uno tapa una franja distinta. */
 .app-bar__actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--wapp-space-2);
 }
 
@@ -98,6 +120,10 @@ body {
 .app-bar__tenant-form {
   display: inline-flex;
   align-items: center;
+  /* El TERCER eslabón de la cadena, y también se midió: sin esto, «Empresa + desplegable + Cambiar»
+     es un bloque indivisible de ~381 px que desborda 45 px a 360 y 85 px a 320. Es la franja que las
+     otras dos reglas no tapan. */
+  flex-wrap: wrap;
   gap: var(--wapp-space-2);
 }
 
@@ -106,6 +132,12 @@ body {
   opacity: 0.75;
 }
 
+/* 🔴 `max-width` ES UNA COTA DE LAYOUT, NO UN ADORNO, Y TIENE QUE SER UNA LONGITUD ABSOLUTA. El
+   nombre de la empresa lo elige el cliente y el ancho natural de un `<select>` lo fija su opción más
+   larga: sin cota, un nombre de 55 caracteres pide 432 px y desborda 136 px a 320. Y la trampa: si
+   se «mejora» a `min(14rem, 100%)`, el porcentaje vuelve INDEFINIDA la cota mientras el navegador
+   calcula el ancho intrínseco, el desplegable se ve igual de recortado y la barra desborda otra vez
+   esos mismos 136 px. Se ve idéntico y no lo es. Medido con las tres variantes. */
 .app-bar__tenant-select {
   width: auto;
   max-width: 14rem;
