@@ -15,8 +15,8 @@ import (
 //   - Cross-tenant ⇒ 404: la plataforma responde 404 y no 403 ante un identificador de otra empresa,
 //     y la consola lo trata como frontera, no como inexistencia.
 
-// ejerceTodasLasPantallas recorre TODA la superficie de la consola contra el doble: las tres páginas
-// y las cinco operaciones. Devuelve el doble con todo lo capturado.
+// ejerceTodasLasPantallas recorre TODA la superficie de la consola contra el doble: las páginas y
+// TODAS las operaciones. Devuelve el doble con todo lo capturado.
 //
 // Que sea exhaustivo es el punto: un aserto sobre «las llamadas» que solo recorriera una pantalla
 // dejaría fuera justo la que un día mande el tenant de más.
@@ -38,11 +38,18 @@ func ejerceTodasLasPantallas(t *testing.T) *stubAPI {
 			`{"session_id":"` + testSessionID + `","edge_id":"edge-alpha","state":"online","profile":"active"}`)},
 		"POST /api/v1/messages":              {http.StatusOK, `{"acked_command_id":"cmd-1","ok":true}`},
 		"POST /api/v1/sessions/{id}/profile": {http.StatusOK, `{"session_id":"` + testSessionID + `","profile":"passive"}`},
+		// Invitaciones (T-A7/T-A8): la pantalla y sus TRES operaciones. El canje es la única llamada
+		// de esta consola que sale con un token que el usuario ha TECLEADO, así que es por donde un
+		// `tenant_id` de más se colaría con más facilidad.
+		"GET /api/v1/invitations":         {http.StatusOK, invitacionesBody()},
+		"POST /api/v1/invitations":        {http.StatusCreated, invitacionEmitidaBody(testInviteToken)},
+		"DELETE /api/v1/invitations/{id}": {http.StatusNoContent, ""},
+		"POST /api/v1/invitations/accept": {http.StatusNoContent, ""},
 	})
 	router := adminRouter(api)
 	sess := clientSessionCookie(t)
 
-	for _, ruta := range []string{"/", "/sesiones", "/miembros", "/roles"} {
+	for _, ruta := range []string{"/", "/sesiones", "/miembros", "/roles", "/invitaciones"} {
 		if rec := getWithSession(t, router, ruta); rec.Code != http.StatusOK {
 			t.Fatalf("GET %s status = %d, want 200", ruta, rec.Code)
 		}
@@ -61,8 +68,12 @@ func ejerceTodasLasPantallas(t *testing.T) *stubAPI {
 	postFormWithCSRF(router, "/sesiones/enviar",
 		url.Values{"session_id": {testSessionID}, "to": {"+593990000002"}, "text": {"hola"}}, sess)
 	postFormWithCSRF(router, "/sesiones/"+testSessionID+"/perfil", url.Values{"profile": {"passive"}}, sess)
+	// Las tres de invitaciones. El canje va con el token en el cuerpo, que es lo que la API espera.
+	postFormWithCSRF(router, "/invitaciones", url.Values{"ttl": {"86400"}, "role_id": {testTenantRoleID}}, sess)
+	postFormWithCSRF(router, "/invitaciones/"+testInvitacionPendiente+"/revocar", url.Values{}, sess)
+	postFormWithCSRF(router, "/invitaciones/canjear", url.Values{"token": {testInviteToken}}, sess)
 
-	if len(api.Requests()) < 13 {
+	if len(api.Requests()) < 19 {
 		t.Fatalf("solo se capturaron %d peticiones: el recorrido no ejercitó la superficie completa (%v)",
 			len(api.Requests()), routesOf(api.Requests()))
 	}

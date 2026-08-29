@@ -87,6 +87,55 @@ const (
 	// diría a la dueña que el mensaje salió cuando no salió.
 	flashSendNotDelivered = "send_not_delivered"
 
+	// --- Desenlaces de la pantalla de invitaciones (T-A7 · T-A8) ---
+
+	// flashInvalidTTL lo emite el formulario de emisión ante una caducidad que no es ninguna de las
+	// que la lista ofrece. No sale a la red, igual que flashInvalidProfile: el recorte a
+	// [60 s, 30 días] lo hace el servidor, y esta consola no lo repite — solo se niega a mandar un
+	// valor que ella misma no ha ofrecido.
+	flashInvalidTTL = "invalid_ttl"
+	// flashInvitationLost es el desenlace más raro y el más difícil de explicar: la invitación SÍ se
+	// creó, pero su código no llegó a la pantalla (no se pudo empaquetar en la cookie de un solo uso).
+	//
+	// Es un DESENLACE A MEDIAS y por eso vive entre los errores: el código ya no se puede recuperar
+	// —existió una vez— pero la invitación está viva y contando su plazo. El texto tiene que decir las
+	// dos mitades y qué hacer: anularla desde el listado y emitir otra.
+	flashInvitationLost = "invitation_lost"
+	// flashInvitationRedeemed traduce el 409 de REVOCAR: esa invitación ya se canjeó.
+	//
+	// 🔴 El texto NO puede decir «hecho»: revocar algo ya consumido no deshace la membresía que el
+	// canje escribió, y dar por buena la operación le diría a la dueña que acaba de retirarle el
+	// acceso a alguien que sigue dentro. Dice dónde se retira de verdad: la baja, en Miembros.
+	flashInvitationRedeemed = "invitation_redeemed"
+
+	// --- Desenlaces del CANJE (los cuatro del criterio, y son para el INVITADO) ---
+	//
+	// Quien lee estos cuatro textos no administra nada: acaba de registrarse y ha pegado un código que
+	// le pasaron por WhatsApp. Cada uno lleva a una acción distinta, y esa es la razón de que sean
+	// cuatro y no uno: volver a copiar el código, pedir otro, o hablar con quien se lo mandó.
+
+	// flashInvitationUnknown traduce el 404: no hay ninguna invitación con ese código. Aquí sí
+	// significa «no existe» —quien canjea no tiene todavía ninguna empresa cuya frontera proteger—,
+	// así que el consejo útil es revisar lo que se pegó.
+	flashInvitationUnknown = "invitation_unknown"
+	// flashInvitationExpired traduce el 410: existía y venció.
+	//
+	// 🔴 Es el que NO puede caer al genérico: «inténtalo de nuevo en un momento» manda a repetir algo
+	// que va a fallar igual para siempre. Lo que hay que hacer es pedir otra invitación.
+	flashInvitationExpired = "invitation_expired"
+	// flashInvitationUnusable traduce el 409, que funde dos causas que el servidor tampoco separa: la
+	// invitación ya se usó o se anuló, o esta cuenta ya pertenece a otra empresa. El texto las dice
+	// las dos porque quien lee no puede saber cuál es la suya, y las dos se resuelven igual.
+	flashInvitationUnusable = "invitation_unusable"
+	// flashJoinedRelogin es el 204 con la sesión a medio actualizar: la persona YA es miembro, pero
+	// esta sesión sigue con el token que se emitió cuando no lo era, y el refresco que lo cambiaría
+	// falló.
+	//
+	// Vive entre los ERRORES por lo mismo que flashAddedWithoutRole: pintarlo como éxito la dejaría
+	// mirando la pantalla de «no perteneces a ninguna empresa» justo después de leer «¡listo!», que es
+	// la forma más rápida de convencer a alguien de que el canje no funcionó.
+	flashJoinedRelogin = "joined_relogin"
+
 	flashMemberAdded   = "member_added"
 	flashMemberRemoved = "member_removed"
 	flashRoleCreated   = "role_created"
@@ -103,7 +152,21 @@ const (
 	// query string. Además cada perfil tiene una consecuencia distinta que contar.
 	flashProfileActive  = "profile_active"
 	flashProfilePassive = "profile_passive"
+
+	// flashInvitationRevoked es el acuse de la revocación. NO dice que la invitación desaparezca:
+	// sigue en el listado, marcada como anulada, porque quien administra necesita ver que aquel código
+	// que repartió ya no vale.
+	flashInvitationRevoked = "invitation_revoked"
+	// flashInvitationAccepted es el 204 del canje CON la sesión ya actualizada. Es el único éxito de
+	// esta consola que lee alguien que no administra nada.
+	flashInvitationAccepted = "invitation_accepted"
 )
+
+// LA EMISIÓN NO TIENE CÓDIGO DE ÉXITO, y es deliberado: su acuse es el CÓDIGO en pantalla, que se
+// enseña una sola vez. Un «invitación creada» en el query string sobreviviría al F5 —la URL no
+// cambia— y volvería a saludar sin el código debajo, que es justo la lectura que hay que evitar:
+// «¿se ha creado otra?». Sin banner, tras recargar solo queda el listado, donde la invitación nueva
+// está la primera.
 
 var (
 	// El fallback vacío cae a web.DefaultFlashFallback ("Ocurrió un error inesperado.").
@@ -131,6 +194,19 @@ var (
 			"Compruébalo en el teléfono ANTES de repetirlo: volver a enviarlo puede duplicarlo.",
 		flashSendNotDelivered: "El equipo recibió el mensaje pero no pudo entregarlo. Revisa el número de destino " +
 			"e inténtalo de nuevo.",
+		flashInvalidTTL: "Elige una de las caducidades de la lista para la invitación.",
+		flashInvitationLost: "La invitación se creó, pero su código no se pudo mostrar y ya no se puede recuperar. " +
+			"Anúlala en el listado y emite otra.",
+		flashInvitationRedeemed: "Esa invitación ya se canjeó, así que anularla no cambia nada: la persona ya está " +
+			"dentro de tu empresa. Para retirarle el acceso, dale de baja en Miembros.",
+		flashInvitationUnknown: "No encontramos esa invitación. Cópiala otra vez ENTERA —sin espacios ni saltos de " +
+			"línea— y vuelve a pegarla.",
+		flashInvitationExpired: "Esa invitación ya caducó. Pídele una nueva a quien te la mandó: las invitaciones " +
+			"duran poco a propósito.",
+		flashInvitationUnusable: "Esa invitación ya se usó o se anuló, o tu cuenta ya pertenece a una empresa. " +
+			"Si crees que es un error, pídele una nueva a quien te la mandó.",
+		flashJoinedRelogin: "Ya formas parte de la empresa, pero esta sesión todavía no lo ve. Cierra sesión y " +
+			"vuelve a entrar y la tendrás.",
 	})
 
 	flashSuccesses = sharedweb.NewFlashCatalog("Acción completada.", map[string]string{
@@ -145,6 +221,9 @@ var (
 		flashProfileActive: "Perfil cambiado a ACTIVA: esa sesión vuelve a conversar sola y contesta por su cuenta.",
 		flashProfilePassive: "Perfil cambiado a PASIVA: esa sesión solo envía. Lo que le escriban se descarta en tu " +
 			"equipo y no sube a la nube.",
+		flashInvitationRevoked: "Invitación anulada. Quien tuviera ese código ya no puede usarlo; sigue en el " +
+			"listado para que veas cuál era.",
+		flashInvitationAccepted: "¡Listo! Ya formas parte de la empresa y puedes empezar a trabajar.",
 	})
 )
 
@@ -217,4 +296,46 @@ func flashCodeForSessions(err error) string {
 		return flashSessionNotYours
 	}
 	return flashCodeFor(err)
+}
+
+// flashCodeForInvitaciones es el traductor del plano de INVITACIONES visto por quien ADMINISTRA:
+// emitir, listar y revocar.
+//
+// Existe por UN desenlace, igual que memberStatusError existía por uno: el 409 de revocar, que aquí
+// significa «esa invitación ya se canjeó» y no «ya existe algo con ese nombre en tu empresa». El
+// genérico daría un texto que no describe nada de lo que pasó y, peor, dejaría a quien administra sin
+// saber que la persona ya está dentro y que retirarla es otra operación.
+//
+// Todo lo demás delega: un traductor propio que copiara el resto de la tabla sería una tabla paralela
+// esperando a desincronizarse.
+func flashCodeForInvitaciones(err error) string {
+	if errors.Is(err, apiclient.ErrInvitationRedeemed) {
+		return flashInvitationRedeemed
+	}
+	return flashCodeFor(err)
+}
+
+// flashCodeForCanje es el traductor del CANJE, y es OTRO porque su lector es otro: no administra
+// nada, acaba de registrarse y ha pegado un código que le llegó por WhatsApp.
+//
+// 🔴 SON CUATRO DESENLACES Y TIENEN QUE LLEGAR DISTINTOS HASTA LA PANTALLA (criterio de la ola). El
+// servidor iguala a propósito el CUERPO y el TIEMPO del 404 y el 410 —para que nadie pueda sondear
+// qué códigos existieron—, pero deja distinto el CÓDIGO DE ESTADO justo para que la UI pueda dar un
+// consejo útil. Por eso aquí se distinguen por sentinela y jamás por el texto del upstream.
+//
+// El ORDEN de las ramas no es contrato entre ellas —las tres son excluyentes—, pero SÍ frente a la
+// delegación final: ErrInvitationUnknown envuelve a ErrNotFound y ErrInvitationUnusable envuelve a
+// ErrConflict, así que delegar antes de preguntar por ellos convertiría «revisa lo que pegaste» en
+// «no pertenece a tu empresa», que es un sinsentido para quien todavía no tiene ninguna.
+func flashCodeForCanje(err error) string {
+	switch {
+	case errors.Is(err, apiclient.ErrInvitationUnknown):
+		return flashInvitationUnknown
+	case errors.Is(err, apiclient.ErrInvitationExpired):
+		return flashInvitationExpired
+	case errors.Is(err, apiclient.ErrInvitationUnusable):
+		return flashInvitationUnusable
+	default:
+		return flashCodeFor(err)
+	}
 }

@@ -21,6 +21,10 @@ import (
 const (
 	sessionCookieName = "wapp_client_session"
 	csrfCookieName    = "wapp_client_csrf"
+	// invitacionCookieName es la cookie EFÍMERA que lleva el código de una invitación recién emitida
+	// del POST al GET que lo enseña. Vive segundos y solo en la pantalla de invitaciones; el nombre es
+	// propio de esta consola por lo mismo que los otros dos.
+	invitacionCookieName = "wapp_client_invitacion"
 )
 
 // consoleWorkday es la jornada de trabajo de la consola y la vida de sus DOS cookies. Ninguna se
@@ -57,6 +61,37 @@ func csrfOptions(cfg *config.Config) sharedweb.CSRFOptions {
 		CookieName: csrfCookieName,
 		MaxAge:     csrfCookieMaxAge,
 		Secure:     cfg.CookieSecure,
+	}
+}
+
+// invitacionCookieMaxAge es el TOPE de la cookie del código, no el mecanismo que la retira: quien la
+// borra de verdad es el GET que la consume (webgin.TakeOneTimeCookie). Es lo que tarda el navegador
+// en seguir un 303, con holgura para una red lenta; si el GET no llega en ese plazo, el código se
+// pierde y la invitación —que sigue viva— se anula desde el listado y se emite otra.
+const invitacionCookieMaxAge = 60 * time.Second
+
+// invitacionCookieOptions es la política de la cookie efímera del código de invitación.
+//
+// El Path se acota a la PANTALLA destino y no a la raíz: fuera de /invitaciones el navegador no la
+// manda, así que el código no viaja en peticiones que no tienen nada que ver con él. Es la MISMA
+// constante con la que se registra la ruta y con la que se redirige tras emitir, y eso es
+// deliberado: si el Path y el destino del redirect se escribieran por separado, bastaría tocar uno
+// para que el navegador dejara de mandar la cookie (o de borrarla) sin que nada fallara al compilar
+// — la pantalla saldría sin el código y solo se vería en producción.
+//
+// El HttpOnly lo fija el módulo SIEMPRE; Secure y SameSite siguen la misma config que la cookie de
+// sesión, porque son política de despliegue de la consola y no de cada pantalla.
+//
+// El valor NO se cifra ni se firma, y está razonado en el doc de web.OneTimeCookieOptions: el
+// destinatario del código es justo quien tiene la cookie, y se le va a pintar en la pantalla dos
+// milisegundos después. Lo único que compra la cookie es que el código no pase por la URL.
+func invitacionCookieOptions(cfg *config.Config) sharedweb.OneTimeCookieOptions {
+	return sharedweb.OneTimeCookieOptions{
+		Name:     invitacionCookieName,
+		Path:     rutaInvitaciones,
+		MaxAge:   invitacionCookieMaxAge,
+		Secure:   cfg.CookieSecure,
+		SameSite: cfg.CookieSameSite,
 	}
 }
 

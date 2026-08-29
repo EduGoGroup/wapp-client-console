@@ -57,6 +57,10 @@ func paginasRenderizadas(t *testing.T, router http.Handler) map[string]*httptest
 			`{"session_id":"` + testSessionID + `","edge_id":"edge-alpha","state":"online",` +
 				`"profile":"active","self_pn":"+593990000001",` +
 				`"intent_circuit":"open","worker_taskset":"solapada"}`)},
+		// La pantalla de invitaciones, también entera: con las cuatro filas hace falta que salgan sus
+		// CUATRO chips de estado y el botón de anular, que solo pinta la fila pendiente.
+		"GET /api/v1/invitations":  {http.StatusOK, invitacionesBody()},
+		"POST /api/v1/invitations": {http.StatusCreated, invitacionEmitidaBody(testInviteToken)},
 	})
 	routerAdmin := adminRouter(api)
 	for nombre, ruta := range map[string]string{
@@ -64,6 +68,7 @@ func paginasRenderizadas(t *testing.T, router http.Handler) map[string]*httptest
 		"sesiones":         "/sesiones",
 		"miembros":         "/miembros",
 		"roles":            "/roles",
+		"invitaciones":     "/invitaciones",
 		"mi_identificador": "/mi-identificador",
 	} {
 		rec := getWithSession(t, routerAdmin, ruta)
@@ -78,6 +83,13 @@ func paginasRenderizadas(t *testing.T, router http.Handler) map[string]*httptest
 	renders["miembros_con_aviso"] = getWithSession(t, routerAdmin, "/miembros?error="+flashNotInYourTenant)
 	renders["roles_con_exito"] = getWithSession(t, routerAdmin, "/roles?success="+flashRoleAssigned)
 
+	// 🔴 La pantalla del CÓDIGO recién emitido es otro HTML —la caja del secreto— y solo existe cuando
+	// el GET trae la cookie efímera que puso la emisión. Sin este par POST+GET, el único bloque de
+	// esta consola que pinta material sensible quedaría fuera de los tests de CSP, de estilo inline y
+	// de JavaScript, y nadie lo notaría: todo lo demás seguiría verde.
+	renders["invitaciones_con_token"] = getConCookies(routerAdmin, "/invitaciones",
+		clientSessionCookie(t), cookieDeInvitacion(t, routerAdmin))
+
 	// Y las MISMAS pantallas en el estado «sin empresa», que es otra rama de plantilla —el parcial
 	// sin_empresa— y por tanto otro HTML que puede traer un style= o un <script> sin que ninguna de
 	// las capturas de arriba lo vea.
@@ -87,6 +99,7 @@ func paginasRenderizadas(t *testing.T, router http.Handler) map[string]*httptest
 		"sesiones_sin_empresa":         "/sesiones",
 		"miembros_sin_empresa":         "/miembros",
 		"roles_sin_empresa":            "/roles",
+		"invitaciones_sin_empresa":     "/invitaciones",
 		"mi_identificador_sin_empresa": "/mi-identificador",
 	} {
 		rec := getConCookie(routerAdmin, ruta, sinTenant)
@@ -119,7 +132,8 @@ func TestPaginas_TodasLasPantallasAutenticadasEstanCubiertas(t *testing.T) {
 	}
 
 	cubiertas := map[string]bool{
-		"/": true, "/sesiones": true, "/miembros": true, "/roles": true, "/mi-identificador": true,
+		"/": true, "/sesiones": true, "/miembros": true, "/roles": true, "/invitaciones": true,
+		"/mi-identificador": true,
 	}
 	for ruta := range rutasGET {
 		if !cubiertas[ruta] {

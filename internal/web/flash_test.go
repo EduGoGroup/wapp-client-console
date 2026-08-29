@@ -144,16 +144,123 @@ func TestFlash_TodosLosCodigosDeLasPantallasTienenTexto(t *testing.T) {
 	t.Parallel()
 
 	for _, code := range []string{flashSessionExpired, flashSelfRemoval, flashMissingField, flashAddedWithoutRole,
-		flashSessionNotYours, flashInvalidProfile, flashSessionOffline, flashSendTimeout, flashSendNotDelivered} {
+		flashSessionNotYours, flashInvalidProfile, flashSessionOffline, flashSendTimeout, flashSendNotDelivered,
+		flashInvalidTTL, flashInvitationLost, flashInvitationRedeemed, flashInvitationUnknown,
+		flashInvitationExpired, flashInvitationUnusable, flashJoinedRelogin} {
 		if !flashErrors.Known(code) {
 			t.Errorf("el código de error %q no tiene texto", code)
 		}
 	}
 	for _, code := range []string{flashLoggedOut, flashMemberAdded, flashMemberRemoved, flashRoleCreated,
-		flashRoleAssigned, flashRoleRemoved, flashMessageSent, flashProfileActive, flashProfilePassive} {
+		flashRoleAssigned, flashRoleRemoved, flashMessageSent, flashProfileActive, flashProfilePassive,
+		flashInvitationRevoked, flashInvitationAccepted} {
 		if !flashSuccesses.Known(code) {
 			t.Errorf("el código de éxito %q no tiene texto", code)
 		}
+	}
+}
+
+// TestFlash_ElPlanoDeInvitacionesConservaElSignificadoDelConflicto.
+//
+// flashCodeForInvitaciones existe por UN desenlace: el 409 de revocar, que aquí significa «esa
+// invitación ya se canjeó». El genérico lo traduciría como «ya existe algo con ese nombre en tu
+// empresa», que no describe nada de lo que pasó y, peor, deja a quien administra sin saber que la
+// persona ya está DENTRO y que retirarla es otra operación.
+//
+// El gemelo —lo que el genérico habría dicho— va al lado: si alguien «simplificara» el traductor,
+// este test se cae en vez de dejar un texto equivocado en pantalla.
+func TestFlash_ElPlanoDeInvitacionesConservaElSignificadoDelConflicto(t *testing.T) {
+	t.Parallel()
+
+	yaCanjeada := fmt.Errorf("invitations.revoke: %w", apiclient.ErrInvitationRedeemed)
+	if got := flashCodeForInvitaciones(yaCanjeada); got != flashInvitationRedeemed {
+		t.Errorf("el 409 de revocar dio %q, want %q", got, flashInvitationRedeemed)
+	}
+	if got := flashCodeFor(yaCanjeada); got == flashInvitationRedeemed {
+		t.Error("el traductor genérico ya distingue este 409: este test dejó de probar nada")
+	}
+
+	// Y el resto delega: un traductor propio que copiara la tabla sería una tabla paralela.
+	for _, caso := range []struct {
+		err  error
+		want string
+	}{
+		{fmt.Errorf("x: %w", apiclient.ErrForbidden), flashForbidden},
+		{fmt.Errorf("x: %w", apiclient.ErrNotFound), flashNotInYourTenant},
+		{errors.New("fallo de red"), flashUpstreamUnavailable},
+		{nil, ""},
+	} {
+		if got := flashCodeForInvitaciones(caso.err); got != caso.want {
+			t.Errorf("flashCodeForInvitaciones(%v) = %q, want %q", caso.err, got, caso.want)
+		}
+	}
+}
+
+// TestFlash_ElCanjeConservaSusTresSignificadosYNingunoCaeAlGenerico.
+//
+// Los tres desenlaces malos del canje llevan a acciones DISTINTAS —volver a copiar el código, pedir
+// otro, o hablar con quien lo mandó— y quien los lee no administra nada: acaba de registrarse. Con el
+// traductor genérico, dos de los tres dirían «no pertenece a tu empresa» (a alguien que todavía no
+// tiene ninguna) y el tercero «inténtalo de nuevo en un momento» ante un código caducado, que es
+// mandar a repetir algo que fallará igual para siempre.
+//
+// Cada caso va con su gemelo genérico para que el test se caiga si alguien funde los traductores.
+func TestFlash_ElCanjeConservaSusTresSignificadosYNingunoCaeAlGenerico(t *testing.T) {
+	t.Parallel()
+
+	casos := []struct {
+		nombre     string
+		err        error
+		want       string
+		genericoDa string
+	}{
+		{"no existe", apiclient.ErrInvitationUnknown, flashInvitationUnknown, flashNotInYourTenant},
+		{"caducada", apiclient.ErrInvitationExpired, flashInvitationExpired, flashUpstreamUnavailable},
+		{"ya usada", apiclient.ErrInvitationUnusable, flashInvitationUnusable, flashConflict},
+	}
+	for _, caso := range casos {
+		envuelto := fmt.Errorf("invitations.redeem: %w", caso.err)
+		if got := flashCodeForCanje(envuelto); got != caso.want {
+			t.Errorf("%s dio %q, want %q", caso.nombre, got, caso.want)
+		}
+		// El gemelo: esto es lo que el genérico habría dicho, y por eso hace falta el traductor.
+		if got := flashCodeFor(envuelto); got != caso.genericoDa {
+			t.Errorf("%s: el genérico dio %q, want %q — si ya distingue el desenlace, este test dejó de probar nada",
+				caso.nombre, got, caso.genericoDa)
+		}
+	}
+
+	// Los tres textos son distintos entre sí: dos desenlaces con el mismo consejo dejarían a quien
+	// canjea intentando lo que no toca.
+	vistos := make(map[string]string, len(casos))
+	for _, caso := range casos {
+		texto := flashError(caso.want)
+		if otro, repetido := vistos[texto]; repetido {
+			t.Errorf("%q y %q dan el MISMO texto: %q", caso.nombre, otro, texto)
+		}
+		vistos[texto] = caso.nombre
+	}
+
+	// Y lo que no es de este plano sigue cayendo por el genérico.
+	if got := flashCodeForCanje(fmt.Errorf("x: %w", apiclient.ErrUnauthorized)); got != flashSessionExpired {
+		t.Errorf("flashCodeForCanje(401) = %q, want %q", got, flashSessionExpired)
+	}
+	if got := flashCodeForCanje(nil); got != "" {
+		t.Errorf("flashCodeForCanje(nil) = %q, want \"\"", got)
+	}
+}
+
+// TestFlash_ElAvisoDeCaducadoNoMandaAReintentar: el 410 del canje NO se arregla insistiendo. El texto
+// se fija por su EFECTO —a dónde manda a quien lo lee—, no por su redacción.
+func TestFlash_ElAvisoDeCaducadoNoMandaAReintentar(t *testing.T) {
+	t.Parallel()
+
+	texto := flashError(flashInvitationExpired)
+	if !strings.Contains(texto, "Pídele una nueva") {
+		t.Errorf("el aviso de caducado no manda a pedir otra invitación: %q", texto)
+	}
+	if strings.Contains(strings.ToLower(texto), "inténtalo de nuevo") {
+		t.Errorf("el aviso de caducado manda a reintentar algo que fallará igual siempre: %q", texto)
 	}
 }
 

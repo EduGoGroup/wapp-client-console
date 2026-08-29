@@ -1,0 +1,142 @@
+{{ define "invitaciones.html" }}
+<section class="page-wide">
+    {{ if .SinEmpresa }}
+    {{ template "sin_empresa" . }}
+    {{ else }}
+    <div class="wapp-card">
+        <h1 class="wapp-title">Invitaciones a tu empresa</h1>
+        <p class="wapp-subtitle">
+            Crea un código, mándaselo por WhatsApp a quien quieras incorporar y esa persona entra sola
+            después de registrarse. No hace falta que te pase nada suyo.
+        </p>
+
+        {{ template "flashes" . }}
+
+        <p class="section-note" id="nota-como-invitar">
+            Cada código sirve UNA sola vez y caduca. Lo verás una única vez, justo después de crearlo:
+            wApp no lo guarda en claro en ninguna parte, así que ni nosotros podemos volver a
+            enseñártelo. Si se pierde, se anula y se crea otro.
+        </p>
+    </div>
+
+    {{/*
+    LA CAJA DEL CÓDIGO. Se pinta solo cuando el GET viene de la emisión: el código llega en una cookie
+    efímera que este mismo GET lee y BORRA, así que al recargar esta pantalla el bloque ya no está —y
+    no porque se esconda, sino porque no hay nada que pintar—. Recargar TAMPOCO crea otra invitación:
+    la emisión fue un POST que terminó en un 303, y lo que el navegador repite al recargar es este GET.
+
+    Está ANTES del formulario a propósito: es lo único de esta pantalla que no se puede recuperar.
+    */}}
+    {{ if .NuevoToken }}
+    <div class="wapp-snackbar wapp-snackbar--success wapp-snackbar--roomy" id="section-token-emitido" role="status">
+        <h2 class="section-title">Invitación creada</h2>
+        <p>
+            Copia este código y mándaselo por WhatsApp a la persona que quieres incorporar.
+            <strong>No se volverá a mostrar.</strong>
+        </p>
+        <div class="wapp-secret-box">{{ .NuevoToken }}</div>
+        {{ if .NuevoTokenExpira }}
+        <p class="wapp-secret-expiry">Caduca: {{ .NuevoTokenExpira }}</p>
+        {{ end }}
+    </div>
+    {{ end }}
+
+    <div class="wapp-card card-stacked" id="section-emitir">
+        <h2 class="section-title">Crear una invitación</h2>
+        <p class="section-note" id="nota-sin-datos">
+            No se te pide el correo ni el teléfono de nadie, y no es un hueco por rellenar: wApp no
+            guarda datos personales de las personas, así que la invitación no sabe —ni puede saber— a
+            quién se la vas a mandar.
+        </p>
+
+        <form method="POST" action="/invitaciones" class="wapp-form-stack" id="form-emitir">
+            <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+            {{/*
+            El desplegable de rol se OMITE si el catálogo no se pudo leer, en vez de pintarse vacío:
+            un <select> sin opciones parece un fallo del formulario. Sin él la invitación sigue
+            funcionando —el rol es opcional— y el rol se asigna después desde Roles.
+            */}}
+            {{ if .Roles }}
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="inv-role">Rol al entrar (opcional)</label>
+                <select class="wapp-field__control" id="inv-role" name="role_id">
+                    <option value="">Sin rol por ahora</option>
+                    {{ range .Roles }}
+                    <option value="{{ .RoleID }}">{{ .Name }}</option>
+                    {{ end }}
+                </select>
+            </div>
+            {{ end }}
+            {{/*
+            Las opciones de caducidad las pone el handler (ttlOfrecidos) y no están escritas aquí: si
+            el desplegable llevara su propia lista, añadir una opción en el HTML daría «caducidad
+            inválida» al elegirla, porque quien valida es la lista de Go.
+            */}}
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="inv-ttl">Caduca en</label>
+                <select class="wapp-field__control" id="inv-ttl" name="ttl">
+                    {{ range .TTLOpciones }}
+                    <option value="{{ .Segundos }}"{{ if .PorDefecto }} selected{{ end }}>{{ .Etiqueta }}</option>
+                    {{ end }}
+                </select>
+            </div>
+            <div class="wapp-actions">
+                <button type="submit" class="wapp-btn wapp-btn--filled wapp-btn--auto">Crear invitación</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="wapp-card card-stacked" id="section-listado">
+        {{/*
+        🔴 AQUÍ NO HAY NI PUEDE HABER UNA COLUMNA CON EL CÓDIGO. El servidor no lo devuelve en este
+        listado —de la invitación solo guarda un digest— y el tipo que esta consola decodifica tampoco
+        tiene dónde meterlo. Lo que se ve es el identificador de la invitación, que no abre ninguna
+        puerta: sirve para reconocer cuál es cuál y para anularla.
+        */}}
+        {{ if .Invitaciones }}
+        <table class="data-table" id="table-invitaciones">
+            <caption class="data-table__caption">Invitaciones de esta empresa, la más reciente primero</caption>
+            <thead>
+                <tr>
+                    <th scope="col">Invitación</th>
+                    <th scope="col">Estado</th>
+                    <th scope="col">Caduca</th>
+                    <th scope="col">Rol al entrar</th>
+                    <th scope="col">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{ range .Invitaciones }}
+                <tr>
+                    <td><code class="mono" title="{{ .ID }}">{{ .Short }}</code></td>
+                    <td><span class="wapp-chip {{ .ChipClass }}">{{ .Estado }}</span></td>
+                    <td class="mono">{{ if .Expira }}{{ .Expira }}{{ else }}—{{ end }}</td>
+                    <td>{{ if .Rol }}{{ .Rol }}{{ else }}Sin rol{{ end }}</td>
+                    <td>
+                        {{ if .Revocable }}
+                        <form method="POST" action="/invitaciones/{{ .ID }}/revocar" class="inline-form">
+                            <input type="hidden" name="csrf_token" value="{{ $.CSRFToken }}">
+                            <button type="submit" class="wapp-btn wapp-btn--auto wapp-btn--compact wapp-btn--danger">Anular</button>
+                        </form>
+                        {{ else }}
+                        <span class="section-note">Ya no se puede usar.</span>
+                        {{ end }}
+                    </td>
+                </tr>
+                {{ end }}
+            </tbody>
+        </table>
+        <p class="section-note" id="nota-anular">
+            Anular una invitación deja su código sin efecto para siempre. A quien YA la haya canjeado
+            no le quita nada: esa persona es miembro de tu empresa y se retira desde
+            <a href="/miembros">Miembros</a>.
+        </p>
+        {{ else }}
+        <p class="empty-state" id="invitaciones-vacio">
+            Todavía no has creado ninguna invitación.
+        </p>
+        {{ end }}
+    </div>
+    {{ end }}
+</section>
+{{ end }}

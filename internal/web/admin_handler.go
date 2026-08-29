@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/EduGoGroup/wapp-client-console/internal/apiclient"
+	"github.com/EduGoGroup/wapp-client-console/internal/config"
 )
 
 // AdminHandler sirve las pantallas de administración del tenant: la portada, los miembros y los
@@ -23,11 +24,18 @@ import (
 type AdminHandler struct {
 	auth *AuthHandler
 	api  *apiclient.Client
+	cfg  *config.Config
 }
 
 // NewAdminHandler construye el handler de las pantallas de administración.
-func NewAdminHandler(auth *AuthHandler, api *apiclient.Client) *AdminHandler {
-	return &AdminHandler{auth: auth, api: api}
+//
+// Recibe la config por UNA cosa: la cookie efímera que lleva el código de una invitación del POST al
+// GET que lo enseña hereda la MISMA política de despliegue (Secure, SameSite) que la cookie de
+// sesión. Dos juegos distintos en la misma consola serían dos verdades que mantener, y la que se
+// olvidara sería la de la pantalla que menos se mira. Mismo criterio que ProvisioningHandler en la
+// consola de plataforma.
+func NewAdminHandler(auth *AuthHandler, api *apiclient.Client, cfg *config.Config) *AdminHandler {
+	return &AdminHandler{auth: auth, api: api, cfg: cfg}
 }
 
 // pageData arma los datos comunes de toda pantalla de administración: título, avisos del catálogo de

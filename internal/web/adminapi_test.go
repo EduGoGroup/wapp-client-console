@@ -230,8 +230,19 @@ func sessionCookieFor(t *testing.T, userID, tenantID string) *http.Cookie {
 
 // getConCookie pide una página con la cookie de sesión que se le dé.
 func getConCookie(router http.Handler, path string, sess *http.Cookie) *httptest.ResponseRecorder {
+	return getConCookies(router, path, sess)
+}
+
+// getConCookies pide una página con TODAS las cookies que se le den. Hay pantallas que dependen de
+// una segunda cookie además de la de sesión: la del código de invitación recién emitido, que es lo
+// único que hace aparecer la caja del secreto.
+func getConCookies(router http.Handler, path string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodGet, path, nil)
-	req.AddCookie(sess)
+	for _, ck := range cookies {
+		if ck != nil {
+			req.AddCookie(ck)
+		}
+	}
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	return rec

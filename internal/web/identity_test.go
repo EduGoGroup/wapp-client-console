@@ -161,16 +161,21 @@ func TestSinEmpresa_LaPortadaNoPreguntaPorElPlan(t *testing.T) {
 
 // TestSinEmpresa_MiembrosYRolesExplicanEnVezDeAcusarDeFaltaDePermiso.
 //
-// Se puede llegar a las dos por la URL aunque la navegación no las ofrezca. Sin empresa la API
+// Se puede llegar a las TRES por la URL aunque la navegación no las ofrezca. Sin empresa la API
 // responde 403 —el token sale sin un solo grant—, y ese texto («no tienes permiso») MIENTE sobre la
 // causa: no le falta un permiso, le falta una empresa. Se explica, y no se llama.
+//
+// La de invitaciones entró en la Ola A y tenía que entrar también aquí: es la que más fácil se llega
+// por la URL —el aviso del canje redirige a la portada, pero el enlace se comparte— y la que peor
+// diagnóstico daría si llamara, porque el 403 de emitir se lee como «no puedes invitar».
 func TestSinEmpresa_MiembrosYRolesExplicanEnVezDeAcusarDeFaltaDePermiso(t *testing.T) {
 	t.Parallel()
 
-	for _, ruta := range []string{"/miembros", "/roles"} {
+	for _, ruta := range []string{"/miembros", "/roles", "/invitaciones"} {
 		api := newStubAPI(t, map[string]stubResponse{
-			"GET /api/v1/members": {http.StatusOK, membersBody(testUserID)},
-			"GET /api/v1/roles":   {http.StatusOK, rolesBody},
+			"GET /api/v1/members":     {http.StatusOK, membersBody(testUserID)},
+			"GET /api/v1/roles":       {http.StatusOK, rolesBody},
+			"GET /api/v1/invitations": {http.StatusOK, invitacionesBody()},
 		})
 		rec := getConCookie(adminRouter(api), ruta, sessionCookieFor(t, testUserID, ""))
 
@@ -187,8 +192,13 @@ func TestSinEmpresa_MiembrosYRolesExplicanEnVezDeAcusarDeFaltaDePermiso(t *testi
 		if n := len(api.Requests()); n != 0 {
 			t.Errorf("%s sin empresa hizo %d llamadas (%v); la respuesta ya se sabe", ruta, n, routesOf(api.Requests()))
 		}
+		// Los DOS caminos que sacan de este estado: pegar la invitación (la vía de la Ola A) y, para
+		// quien no tenga ninguna, su identificador.
+		if !strings.Contains(out, `id="form-canjear"`) {
+			t.Errorf("%s no ofrece pegar la invitación, que es la vía principal", ruta)
+		}
 		if !strings.Contains(out, `href="/mi-identificador"`) {
-			t.Errorf("%s no ofrece el único camino que saca de este estado", ruta)
+			t.Errorf("%s deja sin salida a quien no tiene invitación", ruta)
 		}
 	}
 }
@@ -208,14 +218,18 @@ func TestSinEmpresa_LaNavegacionOfreceSoloLoQueSePuedeUsar(t *testing.T) {
 	conEmpresa := getWithSession(t, router, "/").Body.String()
 	sinEmpresaHTML := getConCookie(router, "/", sessionCookieFor(t, testUserID, "")).Body.String()
 
-	// Positivo: con empresa, la barra ofrece las cuatro.
-	for _, enlace := range []string{`href="/sesiones"`, `href="/miembros"`, `href="/roles"`, `href="/mi-identificador"`} {
+	// Positivo: con empresa, la barra ofrece las cinco.
+	for _, enlace := range []string{`href="/sesiones"`, `href="/miembros"`, `href="/invitaciones"`,
+		`href="/roles"`, `href="/mi-identificador"`} {
 		if !strings.Contains(conEmpresa, enlace) {
 			t.Fatalf("con empresa la barra no ofrece %s: el negativo de abajo sería vacuo", enlace)
 		}
 	}
-	// Negativo: sin empresa, solo la que se puede usar.
-	for _, enlace := range []string{`href="/sesiones"`, `href="/miembros"`, `href="/roles"`} {
+	// Negativo: sin empresa, solo la que se puede usar. `/invitaciones` está en la lista aunque el
+	// parcial de esa misma página tenga un formulario que apunta a /invitaciones/canjear: lo que no
+	// debe ofrecerse es el ENLACE de la barra a la pantalla de emitir, que sin empresa no puede hacer
+	// nada. Por eso el aserto es sobre `href=` y el formulario usa `action=`.
+	for _, enlace := range []string{`href="/sesiones"`, `href="/miembros"`, `href="/invitaciones"`, `href="/roles"`} {
 		if strings.Contains(sinEmpresaHTML, enlace) {
 			t.Errorf("la barra ofrece %s a una sesión sin empresa", enlace)
 		}

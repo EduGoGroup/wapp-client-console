@@ -32,6 +32,7 @@
             {{ if .TenantID }}
             <a href="/sesiones" class="btn btn--text{{ if eq .CurrentPath "/sesiones" }} btn--activo{{ end }}">Sesiones</a>
             <a href="/miembros" class="btn btn--text{{ if eq .CurrentPath "/miembros" }} btn--activo{{ end }}">Miembros</a>
+            <a href="/invitaciones" class="btn btn--text{{ if eq .CurrentPath "/invitaciones" }} btn--activo{{ end }}">Invitaciones</a>
             <a href="/roles" class="btn btn--text{{ if eq .CurrentPath "/roles" }} btn--activo{{ end }}">Roles</a>
             {{ end }}
             <a href="/mi-identificador" class="btn btn--text{{ if eq .CurrentPath "/mi-identificador" }} btn--activo{{ end }}">Mi identificador</a>

@@ -1,20 +1,60 @@
 {{/*
 sin_empresa es lo que ve quien tiene sesión y todavía no pertenece a ninguna empresa.
 
-Es un parcial porque lo pintan TRES pantallas —la portada y las dos de administración, a las que se
-puede llegar por la URL aunque la navegación no las ofrezca—, y el texto tiene que ser el mismo en
-las tres: si cada una lo escribiera a su manera, la que menos se mira acabaría diciendo «no tienes
-permiso», que es justo el diagnóstico equivocado que este bloque existe para evitar.
+Es un parcial porque lo pintan CUATRO pantallas —la portada y las tres de administración (miembros,
+invitaciones y roles), a las que se puede llegar por la URL aunque la navegación no las ofrezca—, y
+el texto tiene que ser el mismo en las cuatro: si cada una lo escribiera a su manera, la que menos se
+mira acabaría diciendo «no tienes permiso», que es justo el diagnóstico equivocado que este bloque
+existe para evitar. (Eran TRES hasta la Ola A, que estrenó la de invitaciones.)
+
+🔴 Y POR ESO MISMO, LA OLA A NO LE PUSO UNA PANTALLA AL LADO: LE CAMBIÓ EL TEXTO. Aquí vivía el apaño
+de T1.6 —«necesita tu identificador, cópialo y pásaselo»—, que era la única vía cuando quien
+administra no tenía forma de invitar a nadie. Hoy la vía es la INVITACIÓN y su formulario está en
+este mismo bloque, así que quien llegue por la portada, por miembros, por invitaciones o por roles lee
+y hace lo mismo. El identificador sigue existiendo y sigue abajo, porque no todo el mundo llega con
+una invitación en la mano — pero ha dejado de ser lo primero que se lee.
+
+Los avisos se pintan DENTRO de este bloque y no en las páginas que lo incluyen: el canje redirige a la
+portada (POST-redirect-GET) y sus cuatro desenlaces se leen aquí, que es donde está el formulario que
+los produjo. Las cuatro páginas pintan `flashes` en su OTRA rama —la de quien sí tiene empresa—, así
+que no se duplica.
 */}}
 {{ define "sin_empresa" }}
 <div class="wapp-card" id="section-sin-empresa">
     <h1 class="wapp-title">Todavía no perteneces a ninguna empresa</h1>
     <p class="wapp-subtitle">
-        Tu cuenta funciona, pero aún no está asociada a ningún negocio en wApp. No es un error ni te
-        falta ningún permiso: falta que quien administra la empresa te dé acceso.
+        Tu cuenta funciona. Lo que falta es entrar en el negocio que te haya invitado: no es un error
+        ni te falta ningún permiso.
     </p>
+
+    {{ template "flashes" . }}
+
+    <h2 class="section-title">Tengo un código de invitación</h2>
+    <p class="section-note" id="nota-canjear">
+        Quien administra la empresa te lo habrá mandado por WhatsApp. Pégalo aquí tal cual —entero, sin
+        espacios ni saltos de línea— y entrarás en su empresa. Cada código sirve una sola vez y caduca,
+        así que si el tuyo ya no funciona, pídele otro.
+    </p>
+
+    <form method="POST" action="/invitaciones/canjear" class="wapp-form-stack" id="form-canjear">
+        <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+        <div class="wapp-field">
+            <label class="wapp-field__label" for="canje-token">Código de invitación</label>
+            <input class="wapp-field__control mono" type="text" id="canje-token" name="token"
+                   required maxlength="200" autocomplete="off" spellcheck="false"
+                   placeholder="Pega aquí el código que te pasaron">
+        </div>
+        <div class="wapp-actions">
+            <button type="submit" class="wapp-btn wapp-btn--filled wapp-btn--auto">Entrar en la empresa</button>
+        </div>
+    </form>
+</div>
+
+<div class="wapp-card card-stacked" id="section-sin-invitacion">
+    <h2 class="section-title">No tengo ningún código</h2>
     <p class="section-note">
-        Para que pueda hacerlo necesita tu identificador. Lo tienes en
+        Pídeselo a quien administra la empresa: lo crea en un clic y te lo manda. Si prefiere
+        incorporarte a mano, lo único que necesita de ti es tu identificador, y lo tienes en
         <a class="link-list__link" href="/mi-identificador">Mi identificador</a>: cópialo y pásaselo.
     </p>
 </div>

@@ -146,7 +146,7 @@ func NewRouterWithLimiter(cfg *config.Config) (*gin.Engine, func()) {
 
 	// El cliente de la API PÚBLICA (:8103), el único upstream de negocio de esta consola. Comparte el
 	// plazo por petición con el resto de la cadena: un upstream sin plazo cuelga la pantalla entera.
-	adminH := NewAdminHandler(authH, apiclient.New(cfg.PublicAPIBaseURL, cfg.UpstreamTimeout))
+	adminH := NewAdminHandler(authH, apiclient.New(cfg.PublicAPIBaseURL, cfg.UpstreamTimeout), cfg)
 
 	// Rutas públicas: la entrada y la salida.
 	router.GET("/login", authH.ShowLogin)
@@ -179,6 +179,22 @@ func NewRouterWithLimiter(cfg *config.Config) (*gin.Engine, func()) {
 	protected.GET("/miembros", adminH.ShowMembers)
 	protected.POST("/miembros", adminH.AddMember)
 	protected.POST("/miembros/:user_id/baja", adminH.RemoveMember)
+
+	// Invitaciones (T-A7) y su revocación (T-A8). Es la vía BUENA para incorporar a alguien: quien
+	// administra emite un código, lo reparte por WhatsApp y la persona entra sola. El alta por
+	// identificador de /miembros es el apaño anterior y sigue ahí para quien no llegue con invitación.
+	//
+	// 🔴 La emisión es POST-redirect-GET y el código viaja al GET en una cookie efímera, NUNCA en la
+	// URL: sin eso, un F5 crearía otra invitación válida que ya nadie puede ver. Ver
+	// invitations_handler.go, que es donde está el razonamiento entero.
+	//
+	// El verbo estático `canjear` va ANTES del parámetro por el mismo criterio que /sesiones/enviar, y
+	// aquí ni siquiera hay vecindad que resolver: `:id` cuelga de /invitaciones/:id/revocar, que es
+	// otro segmento.
+	protected.GET(rutaInvitaciones, adminH.ShowInvitations)
+	protected.POST(rutaInvitaciones, adminH.IssueInvitation)
+	protected.POST(rutaInvitaciones+"/canjear", adminH.RedeemInvitation)
+	protected.POST(rutaInvitaciones+"/:id/revocar", adminH.RevokeInvitation)
 
 	// Sesiones (T2.1): los teléfonos vinculados de la empresa, su perfil y el envío de prueba.
 	//
