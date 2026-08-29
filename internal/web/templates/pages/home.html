@@ -57,12 +57,12 @@
         <h2 class="section-title">Tu plan</h2>
         {{ if $.Entitlements.Resolved }}
         <p class="section-note">
-            Plan contratado: <span class="chip chip--info">{{ $.Entitlements.Plan }}</span>
+            Plan contratado: <span class="wapp-chip wapp-chip--info">{{ $.Entitlements.Plan }}</span>
         </p>
         {{ if $.Entitlements.Features }}
         <ul class="chip-list">
             {{ range $.Entitlements.Features }}
-            <li class="chip chip--ok">{{ . }}</li>
+            <li class="wapp-chip wapp-chip--success">{{ . }}</li>
             {{ end }}
         </ul>
         {{ else }}

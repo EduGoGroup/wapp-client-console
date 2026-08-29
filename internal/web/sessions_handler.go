@@ -225,16 +225,16 @@ func sessionsView(sesiones []apiclient.Session) []sessionView {
 func estadoChip(state string) chipView {
 	switch state {
 	case "online":
-		return chipView{Text: "online", Class: "chip--ok", Title: "El teléfono está conectado y puede enviar."}
+		return chipView{Text: "online", Class: "wapp-chip--success", Title: "El teléfono está conectado y puede enviar."}
 	case "offline":
-		return chipView{Text: "offline", Class: "chip--danger",
+		return chipView{Text: "offline", Class: "wapp-chip--danger",
 			Title: "El teléfono no está conectado ahora mismo: un envío por esta sesión fallará hasta que vuelva."}
 	case "":
-		return chipView{Text: "desconocido", Class: "chip--muted", Title: "La plataforma no reporta el estado de esta sesión."}
+		return chipView{Text: "desconocido", Class: "wapp-chip--neutral", Title: "La plataforma no reporta el estado de esta sesión."}
 	default:
 		// Los demás estados de la flota (`loggedout`, `suspended`, …) se pintan tal cual: inventarles
 		// una traducción aquí crearía un vocabulario que solo existe en esta pantalla.
-		return chipView{Text: state, Class: "chip--muted", Title: "Estado reportado por la plataforma para esta sesión."}
+		return chipView{Text: state, Class: "wapp-chip--neutral", Title: "Estado reportado por la plataforma para esta sesión."}
 	}
 }
 
@@ -246,16 +246,16 @@ func estadoChip(state string) chipView {
 func circuitoChip(circuit string) chipView {
 	switch circuit {
 	case "closed":
-		return chipView{Text: "closed", Class: "chip--ok",
+		return chipView{Text: "closed", Class: "wapp-chip--success",
 			Title: "El breaker del clasificador está cerrado: clasificando con normalidad."}
 	case "open":
-		return chipView{Text: "open", Class: "chip--danger",
+		return chipView{Text: "open", Class: "wapp-chip--danger",
 			Title: "El breaker está ABIERTO: el clasificador no está clasificando (Ollama caído o fallos repetidos)."}
 	case "half_open":
-		return chipView{Text: "half_open", Class: "chip--info",
+		return chipView{Text: "half_open", Class: "wapp-chip--info",
 			Title: "El breaker está probando si el clasificador se recuperó."}
 	default:
-		return chipView{Text: "desconocido", Class: "chip--muted",
+		return chipView{Text: "desconocido", Class: "wapp-chip--neutral",
 			Title: "Este equipo no reporta el breaker: el worker-cajero puede estar parado, o su parte lleva más " +
 				"de 90 s sin refrescarse. NO significa que esté sano."}
 	}
@@ -268,17 +268,17 @@ func circuitoChip(circuit string) chipView {
 func cpuChip(taskset string) chipView {
 	switch taskset {
 	case "disjunta":
-		return chipView{Text: "CPU disjunta", Class: "chip--ok",
+		return chipView{Text: "CPU disjunta", Class: "wapp-chip--success",
 			Title: "El cajero y Ollama corren en núcleos distintos. " + avisoCPUDelArranque}
 	case "solapada":
-		return chipView{Text: "CPU solapada", Class: "chip--danger",
+		return chipView{Text: "CPU solapada", Class: "wapp-chip--danger",
 			Title: "El cajero y Ollama comparten núcleos y se estorban; el síntoma que se ve es latencia. " +
 				avisoCPUDelArranque}
 	case "cajero_sin_confinar":
-		return chipView{Text: "CPU sin confinar", Class: "chip--info",
+		return chipView{Text: "CPU sin confinar", Class: "wapp-chip--info",
 			Title: "El cajero no tiene afinidad fijada (sin taskset). " + avisoCPUDelArranque}
 	default:
-		return chipView{Text: "CPU desconocida", Class: "chip--muted",
+		return chipView{Text: "CPU desconocida", Class: "wapp-chip--neutral",
 			Title: "Este equipo no reporta el reparto de CPU (no es Linux, o el parte del cajero está rancio)."}
 	}
 }

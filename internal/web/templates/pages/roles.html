@@ -28,9 +28,9 @@
                     <td>{{ .Name }}</td>
                     <td>
                         {{ if .Global }}
-                        <span class="chip chip--muted">{{ .Origen }}</span>
+                        <span class="wapp-chip wapp-chip--neutral">{{ .Origen }}</span>
                         {{ else }}
-                        <span class="chip chip--ok">{{ .Origen }}</span>
+                        <span class="wapp-chip wapp-chip--success">{{ .Origen }}</span>
                         {{ end }}
                     </td>
                     <td>{{ if .Parent }}{{ .Parent }}{{ else }}—{{ end }}</td>

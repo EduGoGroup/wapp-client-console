@@ -76,15 +76,15 @@
                 <tr>
                     <td><code class="mono" title="{{ .SessionID }}">{{ .Label }}</code></td>
                     <td class="mono">{{ .EdgeID }}</td>
-                    <td><span class="chip {{ .Estado.Class }}" title="{{ .Estado.Title }}">{{ .Estado.Text }}</span></td>
+                    <td><span class="wapp-chip {{ .Estado.Class }}" title="{{ .Estado.Title }}">{{ .Estado.Text }}</span></td>
                     <td>
                         {{/*
                         Los dos chips de salud del clasificador. El tooltip del reparto de CPU avisa de
                         que su veredicto es del ARRANQUE del cajero y no se recalcula; el del breaker
                         no lo lleva, porque ese sí es continuo. Ver avisoCPUDelArranque.
                         */}}
-                        <span class="chip {{ .Circuito.Class }}" title="{{ .Circuito.Title }}">{{ .Circuito.Text }}</span>
-                        <span class="chip {{ .CPU.Class }}" title="{{ .CPU.Title }}">{{ .CPU.Text }}</span>
+                        <span class="wapp-chip {{ .Circuito.Class }}" title="{{ .Circuito.Title }}">{{ .Circuito.Text }}</span>
+                        <span class="wapp-chip {{ .CPU.Class }}" title="{{ .CPU.Title }}">{{ .CPU.Text }}</span>
                     </td>
                     <td>
                         {{/*

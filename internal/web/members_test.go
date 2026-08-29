@@ -63,7 +63,7 @@ func TestMiembros_MarcaAlUsuarioDeLaSesionYNoLeOfreceDarseDeBaja(t *testing.T) {
 	api := newStubAPI(t, membersOK())
 	out := getWithSession(t, adminRouter(api), "/miembros").Body.String()
 
-	if !strings.Contains(out, `<span class="chip chip--info">tú</span>`) {
+	if !strings.Contains(out, `<span class="wapp-chip wapp-chip--info">tú</span>`) {
 		t.Error("el usuario de la sesión no está marcado como «tú»")
 	}
 	// Gemelo POSITIVO: la otra persona sí tiene su formulario de baja.

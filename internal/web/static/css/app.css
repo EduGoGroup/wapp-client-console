@@ -237,44 +237,14 @@ body {
 }
 
 /* --- Chips --- */
+/* El `<ul>` que envuelve los chips. Es LAYOUT de esta consola y por eso sigue siendo local; el
+   chip en si (`.wapp-chip` y sus variantes) viene del modulo compartido `wapp-shared/ui`. */
 .chip-list {
   display: flex;
   flex-wrap: wrap;
   gap: var(--wapp-space-2);
   list-style: none;
   margin-top: var(--wapp-space-3);
-}
-
-.chip {
-  display: inline-block;
-  padding: 2px var(--wapp-space-3);
-  border-radius: var(--wapp-radius-full);
-  font-size: 0.75rem;
-  font-weight: 600;
-  line-height: 1.6;
-}
-
-.chip--ok {
-  background-color: var(--wapp-color-success-container);
-  color: var(--wapp-color-on-success);
-}
-
-.chip--info {
-  background-color: var(--wapp-color-brand-container);
-  color: var(--wapp-color-brand-on-container);
-}
-
-.chip--muted {
-  background-color: var(--wapp-color-surface-variant);
-  color: var(--wapp-color-on-surface-variant);
-}
-
-/* La variante de ALARMA de un chip (teléfono offline, breaker abierto, CPU solapada). Nace con la
-   pantalla de sesiones: hasta ella ningún chip de esta consola tenía que gritar. Usa los tokens de
-   error del módulo compartido, no un color escrito a mano, para que siga el tema como los demás. */
-.chip--danger {
-  background-color: var(--wapp-color-error-container);
-  color: var(--wapp-color-on-error-container);
 }
 
 /* --- Listas de enlaces (accesos de la portada) --- */

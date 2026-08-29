@@ -75,7 +75,7 @@ func TestPlanGate_SinLaFeatureElBloqueNoSeEmiteYElRestoSigueIntacto(t *testing.T
 	}
 	// Y las features que sí tiene se siguen pintando: el plan se resolvió, no falló.
 	for _, want := range []string{"cart_basic", "intakes_export", "menu"} {
-		if !strings.Contains(out, `<li class="chip chip--ok">`+want+`</li>`) {
+		if !strings.Contains(out, `<li class="wapp-chip wapp-chip--success">`+want+`</li>`) {
 			t.Errorf("falta el chip de la feature efectiva %q", want)
 		}
 	}
