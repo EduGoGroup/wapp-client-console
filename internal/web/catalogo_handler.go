@@ -349,6 +349,9 @@ func (h *AdminHandler) ImportarCatalogo(c *gin.Context) {
 	// APLICAR: 303 SIEMPRE. Pudo escribir el catálogo entero de la empresa, así que la única
 	// respuesta que no invita a reenviarlo con un F5 es la redirección.
 	if envio.aplica() {
+		if code == "" && resultado != nil {
+			registraElReemplazo(resultado)
+		}
 		redirectWith(c, rutaCatalogo, code, flashCatalogoAplicado)
 		return
 	}
@@ -367,6 +370,36 @@ func (h *AdminHandler) ImportarCatalogo(c *gin.Context) {
 		Ref:       envio.Ref,
 		Resultado: resultado,
 	}})
+}
+
+// registraElReemplazo deja el ÚNICO rastro que hoy queda de una operación destructiva (decidido por
+// Jhoan el 2026-08-30: «log ahora, pantalla después»).
+//
+// 🔴 EL HUECO QUE CIERRA, dicho entero: aplicar un catálogo REEMPLAZA el anterior —lo que no venga en
+// el documento deja de venderse— y hasta esta línea no dejaba rastro en NINGUNA parte. La plataforma
+// devuelve `archived_version` con el número en el que archivó el catálogo viejo, y el 303 de D-047.16
+// lo tiraba: no salía en el flash (el catálogo de flash traduce códigos a textos fijos y no interpola
+// datos), no salía en la pantalla de destino (el paso 1 vacío) y no salía en el log. Y no se puede
+// recuperar después desde aquí: esta consola no tiene listado de versiones, y lo único que consume de
+// ese plano —`GET /api/v1/tenant-content`— devuelve `{ref, created_at, updated_at}`, sin versiones.
+//
+// 🔒 ESTO NO TOCA D-047.16: es una línea de log, no un cambio de respuesta. El 303 y el flash se
+// quedan exactamente como estaban.
+//
+// 📌 FLECO CON DUEÑO: llevar el número A LA PANTALLA sigue pendiente y no se hace aquí. Las dos vías
+// que hay —cookie efímera de un solo uso como la de la sugerencia, o repintar con el resultado—
+// reabren el reparto de D-047.16, y eso es una decisión de plan, no un remate.
+//
+// ⚠️ QUÉ SE ESCRIBE Y QUÉ NO, porque esto va a un log: la ref y un entero. NADA del contenido del
+// catálogo —ni el documento, ni el diff, ni un sku, ni una etiqueta de artículo—, que es lo único que
+// esta función tiene a mano y que jamás debe acabar en un fichero de texto plano. Quien añada un
+// campo aquí tiene que responder a esa pregunta antes.
+//
+// Una `version_archivada` en CERO no es un fallo: es el PRIMER import de esa ref, donde no había nada
+// que archivar.
+func registraElReemplazo(resultado *apiclient.CatalogImportResult) {
+	slog.Info("catálogo REEMPLAZADO por completo",
+		"ref", resultado.Ref, "version_archivada", resultado.ArchivedVersion)
 }
 
 // repintaCatalogo devuelve el paso 1 con lo que se mandó y el motivo del rechazo. Es el 400 de

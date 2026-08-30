@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"encoding/csv"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,8 @@ import (
 	"testing"
 
 	sharedweb "github.com/EduGoGroup/wapp-shared/web"
+
+	"github.com/EduGoGroup/wapp-client-console/internal/apiclient"
 )
 
 // catalogo_test.go cubre la IMPORTACIÓN DE CATÁLOGO (Plan 047 · T8.2 · T8.3 · T8.4).
@@ -353,6 +356,50 @@ func TestCatalogo_AplicarRedirigeConFlashYNoRepinta(t *testing.T) {
 	msg := flashSuccess(flashCatalogoAplicado)
 	if !strings.Contains(msg, "archivó") {
 		t.Errorf("el éxito no dice que el catálogo anterior quedó archivado: %q", msg)
+	}
+}
+
+// TestCatalogo_ElREEMPLAZOdejaRASTRO.
+//
+// 🔴 NO ES UN TEST DE LOGS POR GUSTO: hasta esta línea, reemplazar el catálogo entero de una empresa
+// —lo que no venga en el documento deja de venderse— no dejaba rastro en NINGUNA parte. El
+// `archived_version` que devuelve la plataforma se tiraba con el 303, no cabe en el flash (el
+// catálogo no interpola datos) y no se puede recuperar después desde esta consola. El log es lo único
+// que hay, así que se vigila como tal.
+//
+// 🔒 LA OTRA MITAD, y la que de verdad importa: que ahí NO acabe el contenido del catálogo. El
+// resultado trae el documento entero y el diff con sus skus y sus etiquetas, y esto va a un fichero
+// de texto plano. El aserto negativo es el que impide que alguien «enriquezca» la línea.
+//
+// NO va en paralelo a propósito: cambia el logger por defecto, que es global.
+func TestCatalogo_ElREEMPLAZOdejaRASTRO(t *testing.T) {
+	var salida bytes.Buffer
+	anterior := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&salida, nil)))
+	t.Cleanup(func() { slog.SetDefault(anterior) })
+
+	registraElReemplazo(&apiclient.CatalogImportResult{
+		Mode: "apply", Ref: "promociones", Applied: true, Items: 3, ArchivedVersion: 7,
+		Diff: apiclient.CatalogDiff{
+			Removed:        []apiclient.CatalogItemRef{{SKU: "EMP-02", Label: "Empanada de viento"}},
+			ChangedDetails: []string{"QUE-03"},
+		},
+		Document: []byte(documentoNormalizado),
+	})
+
+	linea := salida.String()
+	for _, quiere := range []string{"ref=promociones", "version_archivada=7"} {
+		if !strings.Contains(linea, quiere) {
+			t.Errorf("la línea del reemplazo no lleva %q: %s", quiere, linea)
+		}
+	}
+	// 🔴 Y NADA DEL CATÁLOGO. Ni el documento, ni un sku, ni la etiqueta de un artículo.
+	for _, prohibido := range []string{
+		"EMP-02", "Empanada de viento", "QUE-03", "wapp.catalog_import", "categories",
+	} {
+		if strings.Contains(linea, prohibido) {
+			t.Errorf("el contenido del catálogo (%q) acabó en el log: %s", prohibido, linea)
+		}
 	}
 }
 

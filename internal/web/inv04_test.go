@@ -29,8 +29,15 @@ const rutaEleccionDeEmpresa = "POST /api/v1/auth/active-tenant"
 func ejerceTodasLasPantallas(t *testing.T) *stubAPI {
 	t.Helper()
 
+	// 🔴 EL PLAN DEL DOBLE LAS TRAE TODAS, Y ES PARTE DEL BARRIDO. Dos de las pantallas de esta
+	// consola cuelgan de un gate por feature: sin `cart_basic` la bandeja entera contesta 403 y sin
+	// `catalog_import` la importación también, y en los dos casos NO SE LLAMA A LA API — que es
+	// exactamente cómo una pantalla se cae de este barrido sin que nada falle. `llm_intake` va por lo
+	// mismo un nivel más abajo: sin ella, regenerar y sugerir cortan en el handler y sus dos llamadas
+	// nunca salen.
 	api := newStubAPI(t, map[string]stubResponse{
-		"GET /api/v1/entitlements":         {http.StatusOK, entitlementsBody("commerce", "catalog_import", "menu")},
+		"GET /api/v1/entitlements": {http.StatusOK, entitlementsBody("commerce",
+			"catalog_import", "menu", featureCartBasic, featureLLMIntake)},
 		"GET /api/v1/members":              {http.StatusOK, membersBody(testUserID, testOtherUserID)},
 		"GET /api/v1/roles":                {http.StatusOK, rolesBody},
 		"DELETE /api/v1/members/{user_id}": {http.StatusNoContent, ""},
@@ -64,15 +71,48 @@ func ejerceTodasLasPantallas(t *testing.T) *stubAPI {
 		"GET /api/v1/triggers":         {http.StatusOK, triggersBody(disparadorNormal)},
 		"POST /api/v1/triggers":        {http.StatusCreated, disparadorNormal},
 		"DELETE /api/v1/triggers/{id}": {http.StatusNoContent, ""},
+		// LA BANDEJA (T7.2–T7.6), que llevaba una ola entera sin recorrerse aquí. Son DIEZ puertas y
+		// van todas: entre ellas están las dos que le mandan un WhatsApp a una persona y los dos
+		// formularios cuyo cuerpo lo escribe la dueña a mano en un `<textarea>`.
+		"GET /api/v1/intakes":                        {http.StatusOK, laBandejaDeCampo()},
+		"GET /api/v1/intakes/{id}":                   {http.StatusOK, solicitudDeCampo()},
+		"POST /api/v1/intakes/discard":               {http.StatusOK, descarteBody([]string{testIntakeID}, nil)},
+		"POST /api/v1/intakes/{id}/status":           {http.StatusOK, intakeMovido},
+		"PUT /api/v1/intakes/{id}/items":             {http.StatusOK, solicitudDeCampo()},
+		"POST /api/v1/intakes/{id}/approve":          {http.StatusOK, solicitudDeCampo()},
+		"POST /api/v1/intakes/{id}/request-info":     {http.StatusOK, solicitudDeCampo()},
+		"POST /api/v1/intakes/{id}/reanalyze":        {http.StatusOK, regeneracionEncargada},
+		"POST /api/v1/intakes/{id}/quote-suggestion": {http.StatusOK, sugerenciaDelRespaldo},
+		// LA IMPORTACIÓN DE CATÁLOGO (T8.2/T8.3). 🔴 Es la llamada por la que MÁS falta hacía pasar
+		// este barrido: su cuerpo es un DOCUMENTO ENTERO escrito por el usuario y además viaja en
+		// MULTIPART, que es una forma que ningún otro caso de aquí ejercita — un `tenant_id` de más
+		// dentro de un sobre multipart no se parece a nada de lo de arriba.
+		rutaRefsDeContenido: {http.StatusOK, refsBody("catalogo")},
+		rutaPromptCatalogo: {http.StatusOK,
+			`{"format":"wapp.catalog_import","version":1,"prompt":"pega esto en tu asistente"}`},
+		"GET /api/v1/catalog/import/template": {http.StatusOK, `{"format":"wapp.catalog_import"}`},
+		rutaImportJSON:                        {http.StatusOK, diffDeCampo},
+		rutaImportTabular:                     {http.StatusOK, diffTabularDeCampo},
 	})
 	router := adminRouter(api)
 	sess := clientSessionCookie(t)
 
 	for _, ruta := range []string{"/", "/sesiones", "/miembros", "/roles", "/invitaciones",
-		rutaFlujos, rutaFlujos + "/" + testFlowID, rutaDisparadores} {
+		rutaFlujos, rutaFlujos + "/" + testFlowID, rutaDisparadores,
+		// La bandeja y su detalle (T7.2/T7.3), y la importación (T8.2), que hasta ahora no entraban.
+		rutaSolicitudes, rutaSolicitudes + "/" + testIntakeID, rutaCatalogo,
+		// 🔴 Y LA DESCARGA DE LA PLANTILLA (T8.3), que es un GET que NO devuelve una página. Aquí sí
+		// entra —y no como una excepción tipo `noSonPaginas`— porque lo que este barrido mira es la
+		// PETICIÓN SALIENTE, no el HTML de vuelta: que la respuesta sean bytes no la exime de nada.
+		// Se comprueba aparte por eso mismo: su 200 no es HTML y el bucle de abajo no puede pedirle
+		// que lo sea.
+	} {
 		if rec := getWithSession(t, router, ruta); rec.Code != http.StatusOK {
 			t.Fatalf("GET %s status = %d, want 200", ruta, rec.Code)
 		}
+	}
+	if rec := getWithSession(t, router, rutaPlantillaCatalogo+"?format=json"); rec.Code != http.StatusOK {
+		t.Fatalf("GET %s status = %d, want 200", rutaPlantillaCatalogo, rec.Code)
 	}
 	// El alta con rol, que son DOS llamadas: ninguna de las dos puede llevar la empresa.
 	postFormWithCSRF(router, "/miembros",
@@ -102,12 +142,67 @@ func ejerceTodasLasPantallas(t *testing.T) *stubAPI {
 		"kind": {"keyword"}, "keyword": {"hola"}, "flow_id": {testFlowID}, "match_type": {"exact"},
 	}, sess)
 	postFormWithCSRF(router, rutaDisparadores+"/"+testTriggerID+"/borrar", url.Values{}, sess)
+	// LAS SIETE ACCIONES DEL DETALLE más el descarte por lotes (T7.2–T7.6). Las dos que le hablan al
+	// cliente —aprobar y pedir información— mandan un WhatsApp a una persona, y sus cuerpos llevan
+	// TEXTO tecleado: son las que peor se leerían con una empresa de más metida dentro.
+	detalle := rutaSolicitudes + "/" + testIntakeID
+	postFormWithCSRF(router, rutaSolicitudesDescartar,
+		url.Values{campoDescarteID: {testIntakeID}, campoDescarteAccion: {"discard"}}, sess)
+	postFormWithCSRF(router, detalle+sufijoEstado, url.Values{campoEstado: {"confirmed"}}, sess)
+	// Los DOS formularios de líneas van con una fila de verdad: su cuerpo es una lista de artículos
+	// con precios, que es el cuerpo más grande de la bandeja.
+	lineas := url.Values{
+		campoLineaSKU: {"PAN-01"}, campoLineaEtiqueta: {"Pan de yema"},
+		campoLineaPersonalizacion: {""}, campoLineaCantidad: {"2"}, campoLineaPrecio: {"1,50"},
+	}
+	postFormWithCSRF(router, detalle+sufijoLineas, lineas, sess)
+	postFormWithCSRF(router, detalle+sufijoCorregir, lineas, sess)
+	postFormWithCSRF(router, detalle+sufijoRegenerar, url.Values{"reanalyze_text": {"añadió dos gaseosas"}}, sess)
+	postFormWithCSRF(router, detalle+sufijoAprobar, url.Values{campoRespuesta: {"Le quedan 21000 en total."}}, sess)
+	postFormWithCSRF(router, detalle+sufijoPedirInfo, url.Values{campoPregunta: {"¿Para cuándo lo necesita?"}}, sess)
+	postFormWithCSRF(router, detalle+sufijoSugerir, url.Values{}, sess)
+
+	// 🔴 LA IMPORTACIÓN, Y VA POR MULTIPART, que es su forma de verdad. Las DOS puertas: la del
+	// documento pegado y la de la planilla, y en los dos modos —comprobar y aplicar—, porque aplicar
+	// es la única llamada de esta consola que reemplaza el catálogo entero de una empresa y es
+	// justamente donde una empresa de más haría el daño mayor.
+	postMultipartConCSRF(t, router, rutaCatalogo, url.Values{
+		campoModoCatalogo: {"validate"}, campoRefCatalogo: {"catalogo"},
+		campoDocumentoCatalogo: {documentoPegado},
+	}, nil, sess)
+	postMultipartConCSRF(t, router, rutaCatalogo, url.Values{
+		campoModoCatalogo: {"apply"}, campoRefCatalogo: {"catalogo"},
+		campoDocumentoCatalogo: {documentoNormalizado},
+	}, nil, sess)
+	postMultipartConCSRF(t, router, rutaCatalogo, url.Values{
+		campoModoCatalogo: {"validate"}, campoRefCatalogo: {"catalogo"},
+	}, &ficheroSubido{nombre: "catalogo.csv", contenido: []byte("sku;articulo;precio\nPAN-01;Pan;1.50\n")}, sess)
+
 	// Y la elección de empresa, que es la única llamada de toda la superficie que manda un tenant.
 	postFormWithCSRF(router, rutaEmpresa, url.Values{"tenant_id": {testOtherTenantID}}, sess)
 
-	if len(api.Requests()) < 25 {
+	// 🔴 EL SUELO SUBE CON EL BARRIDO, y por eso no se queda en 25: este número es lo único que
+	// impide que el recorrido de arriba se quede a medias en silencio —un gate que empiece a cortar,
+	// un formulario que se rechace en local— y siga saliendo verde sobre las pocas llamadas que sí
+	// salieron. Con la bandeja y la importación dentro son 40 y pico; el suelo se deja por debajo
+	// para no atarlo al conteo exacto, pero MUY por encima del anterior.
+	if len(api.Requests()) < 40 {
 		t.Fatalf("solo se capturaron %d peticiones: el recorrido no ejercitó la superficie completa (%v)",
 			len(api.Requests()), routesOf(api.Requests()))
+	}
+	// Y las puertas que este barrido acaba de estrenar tienen que haber salido DE VERDAD: sin esto,
+	// un gate por feature que cortara antes de la red dejaría las dos pantallas fuera y el conteo de
+	// arriba seguiría cuadrando con las llamadas de las demás.
+	for _, ruta := range []string{
+		"GET /api/v1/intakes", "POST /api/v1/intakes/discard",
+		"POST /api/v1/intakes/" + testIntakeID + "/approve",
+		"POST /api/v1/catalog/import", "POST /api/v1/catalog/import/tabular",
+		"GET /api/v1/catalog/import/template",
+	} {
+		if !api.Called(ruta) {
+			t.Fatalf("%s no llegó a salir: esa pantalla se cayó del barrido (salieron %v)",
+				ruta, routesOf(api.Requests()))
+		}
 	}
 	return api
 }
