@@ -31,6 +31,11 @@ func testConfig(publicAPIURL, identityURL string) *config.Config {
 		CookieSameSite:   "lax",
 		RateLimitEnabled: false,
 		UpstreamTimeout:  5 * time.Second,
+		// 🔑 EL PLAZO DE LA SUGERENCIA VA CON SU DEFAULT DE PRODUCCIÓN y no a cero, para que TODA la
+		// suite corra el cableado de verdad: con 0, el despachador de plazos tomaría siempre la rama
+		// corta y el write deadline de la ruta sería un middleware transparente, así que la mitad del
+		// aparato de T7.6 no se ejercitaría en ningún test que no lo montara a mano.
+		QuoteSuggestionTimeout: config.DefaultQuoteSuggestionTimeout,
 	}
 }
 

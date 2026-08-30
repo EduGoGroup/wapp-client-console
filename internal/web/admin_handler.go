@@ -131,6 +131,40 @@ func (h *AdminHandler) call(c *gin.Context, fn func(accessToken string) error) s
 func sessionIsDead(err error) bool { return errors.Is(err, apiclient.ErrUnauthorized) }
 
 // redirectWith manda a `path` con el código de flash correspondiente (POST-redirect-GET).
+//
+// 🔒 EL PRG DE ESTA CONSOLA TIENE UNA REGLA, Y ESTÁ ESCRITA AQUÍ A PROPÓSITO (D-047.16, decidida el
+// 2026-08-29): era universal —303 siempre— y desde la Ola 6 no lo es. La frontera:
+//
+//	validación que falla ANTES de llamar a la API .... 400 REPINTANDO, con el formulario intacto
+//	la API responde error (409, 502, 401…) ........... 303 + flash (esta función)
+//	éxito ............................................ 303 + flash (esta función)
+//
+// 🔑 El argumento no es de gusto: el POST-Redirect-GET existe para que RECARGAR NO REENVÍE UNA
+// MUTACIÓN. Un rechazo de validación local no mutó nada —la petición ni siquiera salió—, así que
+// repintarlo no crea el problema que el PRG resuelve, y sí evita que el usuario pierda lo escrito.
+// Por eso no es «romper el PRG»: es aplicarlo donde protege.
+//
+// 🔒 EXTENSIÓN DEL 2026-08-30 (decidida por Jhoan, aplicada en T7.4): el criterio de la línea de
+// arriba NO es «la validación es local», es «NO HUBO MUTACIÓN» — y el mismo argumento vale cuando la
+// validación vive al otro lado del cable. El primer caso que entra por ahí es el 400 `invalid_items`
+// del cloud al guardar líneas (solicitudes_lineas.go): la edición es todo-o-nada, así que ese
+// rechazo no escribió nada y repintarlo devuelve la tabla tecleada Y la lista de defectos por línea,
+// que es con lo que se corrige. Lo que NO se extiende es el resto: 409, 422, 502 y los 400 sin
+// cuerpo nombrado sí pudieron mutar, y siguen saliendo por aquí.
+//
+// Quien traiga un desenlace nuevo tiene que responder a UNA pregunta, y solo a ésa: ¿pudo escribir
+// algo al otro lado? Si no, repinta; si sí —o si no se puede saber—, 303.
+//
+// Hoy la excepción vive en DOS sitios y en los dos hay algo que perder: la publicación de un flujo
+// (el `definition` entero, que puede ser un JSON de decenas de líneas) y el alta de un disparador
+// (sus ocho campos). Ver editor_handler.go. Lo que NO entra en la excepción es un formulario sin nada
+// que perder —el borrado de un disparador es un botón suelto—: ahí el desenlace malo va por 303 igual
+// que el bueno.
+//
+// ❌ Lo descartado, para que no se reabra: «303 siempre + borrador en cookie de un solo uso». Para los
+// ocho campos cortos funcionaría; para el `definition` NO CABE —pasados ~4 KB el navegador descarta la
+// cookie EN SILENCIO (defecto documentado en T3.5)— y el usuario perdería lo tecleado igual, pero
+// ahora sin saber por qué.
 func redirectWith(c *gin.Context, path, errCode, okCode string) {
 	if errCode != "" {
 		c.Redirect(http.StatusSeeOther, path+"?error="+errCode)

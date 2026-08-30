@@ -283,6 +283,11 @@ func TestPeticiones_LlevanElTokenYNoLaEmpresa(t *testing.T) {
 			_, err := c.Entitlements.Get(context.Background(), tokenDePrueba)
 			return err
 		},
+		// 🔴 LA BANDEJA (los diez métodos de IntakesClient) NO ESTÁ EN ESTA TABLA, y no es un olvido:
+		// tiene su propio aserto en intakes_test.go (TestIntakes_INV04_LaEmpresaNoViajaEnNingunaDeLasDiez),
+		// que además barre las TRES posiciones —query, cuerpo y ruta— y no solo la query. Duplicarla
+		// aquí no añadiría cobertura y sí un segundo sitio que actualizar cuando cambie.
+		//
 		// El LISTADO de empresas sí entra en la tabla: lee las del sujeto y no le pasa ninguna. La
 		// que NO entra es `tenants.set_active`, que es la excepción declarada a INV-04 y tiene su
 		// test hermano justo debajo de este.

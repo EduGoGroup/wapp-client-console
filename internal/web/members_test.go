@@ -317,3 +317,38 @@ func TestMiembros_UnA401QueSobreviveAlRefrescoExpulsaALogin(t *testing.T) {
 		t.Errorf("Location = %q, want /login con el aviso de sesión caducada", got)
 	}
 }
+
+// TestMiembros_LaTablaConservaSusTresColumnas (T6.2).
+//
+// 🔴 Este test es lo que hace OBSERVABLE la mutación del partial de tabla. Desde T6.2 el `<thead>` de
+// esta pantalla ya no está escrito aquí: lo pinta `partials/data_table.html` recorriendo la lista de
+// columnas que la plantilla le pasa. Sin este aserto, quitar una columna del armazón compartido
+// dejaría la pantalla con una cabecera de menos y TODOS los tests del paquete en verde —lo
+// comprobamos: el único `<th>` vigilado del paquete estaba en sesiones, que no usa el partial—.
+//
+// Se cuenta ADEMÁS de comprobar los tres nombres: si se comprobaran solo los nombres, añadir una
+// columna fantasma pasaría, y si se contara solo, cambiarle el nombre a una pasaría también.
+func TestMiembros_LaTablaConservaSusTresColumnas(t *testing.T) {
+	t.Parallel()
+	api := newStubAPI(t, membersOK())
+	out := getWithSession(t, adminRouter(api), "/miembros").Body.String()
+
+	desde := strings.Index(out, `id="table-members"`)
+	if desde < 0 {
+		t.Fatal("la pantalla no pintó la tabla de miembros")
+	}
+	hasta := strings.Index(out[desde:], "</table>")
+	if hasta < 0 {
+		t.Fatal("la tabla de miembros no se cierra")
+	}
+	tabla := out[desde : desde+hasta]
+
+	for _, columna := range []string{"Identificador", "Alta", "Acciones"} {
+		if !strings.Contains(tabla, `<th scope="col">`+columna+`</th>`) {
+			t.Errorf("falta la columna %q en la cabecera de la tabla de miembros", columna)
+		}
+	}
+	if n := strings.Count(tabla, `<th scope="col">`); n != 3 {
+		t.Errorf("la tabla de miembros tiene %d columnas, want 3", n)
+	}
+}

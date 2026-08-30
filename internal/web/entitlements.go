@@ -15,17 +15,37 @@ import (
 // olvido falla CERRADO, que es el lado correcto por el que fallar.
 const entitlementsDataKey = "Entitlements"
 
-// featureCatalogImport es la feature que gatea la sección de importación de catálogo en la portada.
+// featureCatalogImport es la capacidad de la CARGA MASIVA DEL CATÁLOGO.
 //
-// 🔴 Por qué ESTA y no otra (D-047.10): el plano de roles y miembros es CAPACIDAD BASE y NO va
-// detrás de ninguna feature —una empresa sin plan sigue teniendo que poder administrar a su gente—,
-// así que el gate tenía que colgar de otra sección. `catalog_import` es la única candidata que
-// cumple las tres condiciones a la vez: (1) es administración del tenant y por tanto del perímetro de
-// ESTA consola, no del pipeline conversacional; (2) sus DOS ramas son alcanzables en producción
-// —`basic` NO la tiene y `commerce` en adelante SÍ (seed 0039)—, así que ni el bloque ON ni el OFF
-// son estados de laboratorio; y (3) no es un add-on suelto como `multi_empresa` o `passive_profiles`,
-// que no entran en ningún paquete comercial y dejarían la rama ON sin ocurrir nunca fuera de `pro`.
+// 🔴 Por qué ESTA y no otra para estrenar el gate por plan (D-047.10): el plano de roles y miembros
+// es CAPACIDAD BASE y NO va detrás de ninguna feature —una empresa sin plan sigue teniendo que poder
+// administrar a su gente—, así que el gate tenía que colgar de otra sección. `catalog_import` es la
+// única candidata que cumple las tres condiciones a la vez: (1) es administración del tenant y por
+// tanto del perímetro de ESTA consola, no del pipeline conversacional; (2) sus DOS ramas son
+// alcanzables en producción —`basic` NO la tiene y `commerce` en adelante SÍ (seed 0039)—, así que ni
+// el bloque ON ni el OFF son estados de laboratorio; y (3) no es un add-on suelto como `multi_empresa`
+// o `passive_profiles`, que no entran en ningún paquete comercial y dejarían la rama ON sin ocurrir
+// nunca fuera de `pro`.
+//
+// 🆕 DESDE T8.2 GATEA LAS DOS COSAS, y conviene leerlo junto al comentario de featureCartBasic, que
+// antes decía lo contrario: sigue gateando un BLOQUE DE PLANTILLA —la tarjeta de la portada que
+// ofrece la pantalla— y además gatea la RUTA entera de /importar-catalogo, con el mismo middleware de
+// grupo que la bandeja. Las dos mitades hacen falta y ninguna sustituye a la otra: esconder la
+// tarjeta decide lo que se PINTA, y quien teclee la URL entra igual si nadie corta la ruta.
 const featureCatalogImport = "catalog_import"
+
+// featureCartBasic es la capacidad que abre la BANDEJA DE SOLICITUDES (Plan 047 · T7.2).
+//
+// Es la MISMA clave con la que la plataforma gatea las diez rutas de la bandeja
+// (`RequireFeature("cart_basic")`), y esa sigue siendo la autoridad: aquí decide si esta consola
+// deja ENTRAR en la pantalla, allí decide si se PUEDE operar. Un gate de esta capa nunca sustituye
+// al del servidor; le ahorra el viaje y da la explicación en la voz de esta consola.
+//
+// 🔴 GATEA LA RUTA ENTERA —middleware sobre el grupo, ver solicitudes_gate.go— y NO un bloque de
+// plantilla suelto. Eso era, hasta T8.2, la diferencia con featureCatalogImport; ya no lo es: aquélla
+// gatea ahora las dos cosas (la tarjeta de la portada y su propia ruta), y comparte con ésta el mismo
+// middleware. Lo que sigue siendo cierto es que un gate de esta capa nunca sustituye al del servidor.
+const featureCartBasic = "cart_basic"
 
 // entitlementsView es el plan del tenant tal como lo consume la plantilla.
 //
@@ -95,4 +115,33 @@ func entitlementsNotice(err error) string {
 	}
 	return "No se pudo consultar el plan de la empresa ahora mismo. " +
 		"Las secciones que dependen de una capacidad quedan ocultas hasta que se pueda comprobar."
+}
+
+// entitlementsContextKey es la clave con la que el GATE POR RUTA deja la vista del plan en el
+// contexto de gin para que el handler la reutilice (ver solicitudes_gate.go).
+//
+// 🔴 Es OTRA clave que entitlementsDataKey y no la misma por accidente: aquella nombra el dato en la
+// PLANTILLA y esta en el CONTEXTO de la petición. Son dos mapas distintos y confundirlos no daría un
+// error, daría un dato que aparece donde no se espera.
+const entitlementsContextKey = "wapp.entitlements"
+
+// entitlementsFromContext devuelve la vista del plan que sembró el gate.
+//
+// 🔑 Existe para que el coste se quede en UNA llamada por petición: el gate ya preguntó, y un
+// handler que volviera a llamar a resolveEntitlements pagaría el viaje dos veces (esta consola
+// resuelve el plan sin caché, una vez por petición).
+//
+// FAIL-CLOSED POR CONSTRUCCIÓN: si no hay nada sembrado —o hay algo de otro tipo— se devuelve la
+// vista CERO, cuyo mapa `enabled` es nil y por tanto `Has` da false para todo. No hay ninguna rama
+// que lo abra.
+func entitlementsFromContext(c *gin.Context) entitlementsView {
+	valor, ok := c.Get(entitlementsContextKey)
+	if !ok {
+		return entitlementsView{}
+	}
+	vista, ok := valor.(entitlementsView)
+	if !ok {
+		return entitlementsView{}
+	}
+	return vista
 }

@@ -118,11 +118,22 @@ func NewRouterWithLimiter(cfg *config.Config) (*gin.Engine, func()) {
 		c.JSON(http.StatusOK, gin.H{"status": "healthy", "time": time.Now().UTC().Format(time.RFC3339)})
 	})
 
+	// 🔴 EL TECHO DE CUERPO VA AQUÍ, POR DELANTE DEL CSRF, Y EL ORDEN ES EL DISEÑO: el CSRF lee el
+	// formulario para comparar el token, y con eso consume el cuerpo entero —a memoria y a disco—, así
+	// que un tope montado después llegaría cuando el daño ya está hecho. Cubre UNA ruta, la única de
+	// esta consola que recibe un fichero. El porqué del número —y por qué NO es el mismo que el techo
+	// del fichero— está entero en catalogo_limite.go.
+	router.Use(limiteDeCuerpo(maxCuerpoCatalogo, rutaCatalogo))
+
 	// A partir de aquí, todo lo que se registre queda bajo la defensa CSRF double-submit con la
 	// cookie de ESTA consola, y con el plazo por petición que acota la cadena hacia identity y la
 	// API pública.
 	router.Use(webgin.CSRF(csrfOptions(cfg)))
-	router.Use(webgin.RequestDeadline(cfg.UpstreamTimeout))
+	// 🔴 EL DEADLINE POR PETICIÓN YA NO ES UNO PARA TODOS (T7.6): sigue siendo UpstreamTimeout en las
+	// ~20 rutas de esta consola y es más largo en UNA, la sugerencia de la respuesta, que es la única
+	// que espera a que un modelo redacte. El porqué —y por qué no vale un middleware propio DESPUÉS
+	// de éste— está entero en solicitudes_plazos.go.
+	router.Use(plazoPorRuta(cfg))
 
 	// El `system` con el que esta consola se presenta ante identity es CAMPO del cliente, no una
 	// constante del módulo: el System Gate autoriza aplicaciones, no ecosistemas. Unas opciones que
@@ -227,6 +238,108 @@ func NewRouterWithLimiter(cfg *config.Config) (*gin.Engine, func()) {
 	protected.POST("/roles/asignar", adminH.AssignRole)
 	protected.POST("/roles/retirar", adminH.UnassignRole)
 
+	// El EDITOR (T6.3 · T6.4): los flujos que la conversación recorre y los disparadores que deciden
+	// cuándo se entra en ellos. Mudado de wapp-guardian-bff, que se queda sin las dos pantallas en
+	// este mismo ciclo (REQ-08).
+	//
+	// 🔴 Los DOS POST que llevan formulario —publicar y crear— NO redirigen siempre, y es la única
+	// excepción al POST-redirect-GET universal de esta consola: D-047.16. Un rechazo de la validación
+	// LOCAL repinta con 400 y devuelve lo tecleado; el error de la API y el éxito van por 303 + flash.
+	// El razonamiento entero está en editor_handler.go y junto a redirectWith.
+	//
+	// El borrado va por POST y el cliente de la API lo traduce a DELETE, igual que la baja de un
+	// miembro: el navegador no emite DELETE y esta casa no tiene JavaScript.
+	//
+	// `/flujos/nuevo` cae en la ruta con parámetro y NO tiene ruta propia: `nuevo` es un VALOR MÁGICO
+	// que el handler reconoce y que pinta el formulario de alta sin llamar a la API (ver flujoNuevo).
+	// Registrarlo como hermano estático de `:id` no serviría de nada y sí escondería que el valor
+	// mágico existe.
+	protected.GET(rutaFlujos, adminH.ShowFlows)
+	protected.GET(rutaFlujos+"/:id", adminH.ShowFlowDetail)
+	protected.POST(rutaFlujos, adminH.PublishFlow)
+
+	protected.GET(rutaDisparadores, adminH.ShowTriggers)
+	protected.POST(rutaDisparadores, adminH.CreateTrigger)
+	protected.POST(rutaDisparadores+"/:id/borrar", adminH.DeleteTrigger)
+
+	// LA BANDEJA DE SOLICITUDES (T7.2): lo que los clientes pidieron por WhatsApp. Mudada de
+	// wapp-guardian-bff, que se queda sin ella en este mismo ciclo (T7.7).
+	//
+	// 🔒 ES EL PRIMER GRUPO DE ESTA CONSOLA CON GATE POR FEATURE, y va como MIDDLEWARE SOBRE EL
+	// GRUPO y no como un `if` dentro de cada handler: el BFF copió ese `if` en cinco sitios y por eso
+	// su GET y sus POST acabaron respondiendo códigos distintos ante la misma ausencia de feature sin
+	// que nadie lo decidiera. Aquí, quien añada una ruta de solicitudes la registra dentro del grupo
+	// y hereda el gate sin acordarse de él. El porqué del 403 y del fail-closed está en
+	// solicitudes_gate.go.
+	//
+	// El verbo estático `descartar` va ANTES del `:id` del detalle, que es la regla de esta casa
+	// (mismo criterio que /sesiones/enviar). Lo único que esa vecindad se comería es una solicitud que
+	// se llamara literalmente «descartar», y los identificadores son `in-…`.
+	//
+	// 📌 LAS SIETE ACCIONES DEL DETALLE ESTÁN COMPLETAS. Las cuatro que NO le hablan al cliente
+	// llegaron en T7.4 —mover el estado, guardar las líneas facturables, corregir la interpretación y
+	// regenerarla, y ninguna manda un mensaje por WhatsApp: regenerar reinterpreta un texto ya recibido
+	// y el cliente no se entera—, LAS DOS QUE SÍ LE HABLAN en T7.5 —aprobar y pedir más información— y
+	// la que cuesta una inferencia en T7.6: sugerir la respuesta.
+	//
+	// 🔴 ESAS DOS DE T7.5 MANDAN UN WHATSAPP A UNA PERSONA. No se registran distinto —el gate del grupo
+	// y el CSRF de la casa son los mismos— pero su reparto de desenlaces sí es propio, porque un
+	// repintado sobre un envío ya hecho invita a un F5 que lo enviaría dos veces: está escrito entero
+	// en la cabecera de solicitudes_acciones.go.
+	//
+	// 🔴 Y LA DE T7.6 ES LA ÚNICA RUTA DE ESTA CONSOLA CON PLAZOS PROPIOS, los tres: el cliente HTTP
+	// (apiclient), el deadline por petición (plazoPorRuta, arriba) y el write deadline, que se instala
+	// AQUÍ como middleware de la ruta y no en el grupo —relevar al WriteTimeout del servidor es
+	// exactamente lo que el resto de esta consola no debe hacer—. Es POST aunque no escriba nada, y no
+	// es por el formulario: consume una inferencia, no es cacheable, no es gratis, y un GET lo
+	// dispararía un prefetch del navegador.
+	//
+	// 🔑 Las rutas se componen con las MISMAS constantes de sufijo con las que solicitudes_detalle.go
+	// arma el `action` de cada formulario. Escribirlas aquí como literal daría dos cadenas que nadie
+	// compila y que pueden dejar de coincidir sin que nada falle: un formulario apuntando a una ruta
+	// que el router escribe distinto es un 404 que ningún gate ve venir.
+	solicitudes := protected.Group(rutaSolicitudes)
+	solicitudes.Use(adminH.requiereFeature(featureCartBasic, plantillaSolicitudes, tituloSolicitudes))
+	solicitudes.GET("", adminH.ShowSolicitudes)
+	solicitudes.POST(rutaDescartarSufijo, adminH.DescartarSolicitudes)
+	solicitudes.GET(rutaSolicitudDetalle, adminH.ShowSolicitudDetalle)
+	solicitudes.POST(rutaSolicitudDetalle+sufijoEstado, adminH.CambiarEstadoSolicitud)
+	solicitudes.POST(rutaSolicitudDetalle+sufijoLineas, adminH.GuardarLineasSolicitud)
+	solicitudes.POST(rutaSolicitudDetalle+sufijoCorregir, adminH.CorregirInterpretacionSolicitud)
+	solicitudes.POST(rutaSolicitudDetalle+sufijoRegenerar, adminH.RegenerarSolicitud)
+	solicitudes.POST(rutaSolicitudDetalle+sufijoAprobar, adminH.AprobarSolicitud)
+	solicitudes.POST(rutaSolicitudDetalle+sufijoPedirInfo, adminH.PedirInfoSolicitud)
+	solicitudes.POST(rutaSolicitudDetalle+sufijoSugerir,
+		plazoDeEscrituraSugerencia(cfg), adminH.SugerirRespuestaSolicitud)
+
+	// LA IMPORTACIÓN DE CATÁLOGO (T8.2 · T8.3): la carga masiva de la lista de productos. Mudada de
+	// wapp-guardian-bff, que se queda sin ella en este mismo ciclo (T8.5).
+	//
+	// 🔒 SEGUNDO GRUPO CON GATE POR FEATURE, y REUTILIZA el middleware que nació con la bandeja
+	// (solicitudes_gate.go) en vez de estrenar uno: es exactamente el mismo corte sobre otra
+	// capacidad, y dos implementaciones del mismo fail-closed son dos sitios donde una se abre. El
+	// gate cubre las TRES rutas, descarga incluida — en el BFF cada handler repetía su propio `if` y
+	// la descarga acababa contestando distinto que el POST ante la misma ausencia de plan.
+	//
+	// 🔴 EL POST ES UNO Y ATIENDE LOS DOS PASOS —comprobar y aplicar—, y lo que los separa es el
+	// campo `mode` que manda el botón pulsado. No hay una ruta `/aplicar` y no debe inventarse: la
+	// API tampoco tiene dos endpoints, tiene uno parametrizado por `mode`. La consecuencia para quien
+	// escriba un test está en la cabecera de catalogo_handler.go — comprobar «el POST contestó» pasa
+	// con los dos confundidos, y confundirlos reemplaza el catálogo de una empresa sin aprobación.
+	//
+	// El verbo estático `plantilla` cuelga de la ruta y NO compite con ningún `:id`: esta pantalla no
+	// tiene detalle por identificador, así que la vecindad que sí hubo que resolver en /solicitudes
+	// aquí no existe.
+	//
+	// 🔑 Las rutas se componen con las MISMAS constantes con las que la plantilla arma los enlaces de
+	// descarga. Escribirlas aquí como literal daría dos cadenas que nadie compila y que pueden dejar
+	// de coincidir sin que nada falle.
+	catalogo := protected.Group(rutaCatalogo)
+	catalogo.Use(adminH.requiereFeature(featureCatalogImport, plantillaCatalogo, tituloCatalogo))
+	catalogo.GET("", adminH.ShowCatalogo)
+	catalogo.POST("", adminH.ImportarCatalogo)
+	catalogo.GET(rutaPlantillaSufijo, adminH.DescargarPlantillaCatalogo)
+
 	var cleanup func()
 	if rateLimiter != nil {
 		cleanup = rateLimiter.Close
@@ -258,6 +371,21 @@ func parseTemplates() *template.Template {
 			}
 			return template.HTML(buf.String()), nil // #nosec G203
 		},
+		// `tabla` arma el descriptor del partial `data_table` desde la propia plantilla: html/template
+		// no sabe construir un valor compuesto, y describir la tabla en el handler la alejaría de la
+		// pantalla que la pinta. Ver table_view.go.
+		"tabla": tabla,
+		// `statusLabel` traduce la clave del ciclo de vida de una solicitud al nombre con el que la
+		// dueña del negocio la llama. Es helper de plantilla y no un campo de la vista porque lo usan
+		// las DOS pantallas de la bandeja —la lista y el detalle— sobre listas que vienen crudas de la
+		// API. Ver solicitudes_estado.go.
+		"statusLabel": statusLabel,
+		// `fecha` escribe un instante de la API para que lo lea una persona, y ESCRIBE ELLA el huso
+		// (T7.3). Es helper de plantilla por lo mismo que statusLabel: los instantes llegan dentro de
+		// tipos del apiclient que pintan las dos pantallas de la bandeja, y copiarlos a una vista solo
+		// para formatearlos habría dado dos redacciones del mismo dato. Ver formato.go, que es donde
+		// está escrito por qué el huso es UTC y no el de quien mira.
+		"fecha": fecha,
 	})
 	tmpl, err := root.ParseFS(templatesFS,
 		"templates/layouts/*.html",

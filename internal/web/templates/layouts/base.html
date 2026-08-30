@@ -35,6 +35,66 @@
             <a href="/invitaciones" class="btn btn--text{{ if eq .CurrentPath "/invitaciones" }} btn--activo{{ end }}">Invitaciones</a>
             <a href="/roles" class="btn btn--text{{ if eq .CurrentPath "/roles" }} btn--activo{{ end }}">Roles</a>
             {{/*
+            El EDITOR (T6.5): las dos pantallas que llegan de wapp-guardian-bff en esta misma ola.
+            Van DESPUÉS de la administración de personas y antes del selector de empresas porque son
+            de otra cosa: quién entra en la empresa arriba, qué hace la conversación aquí.
+
+            🔴 «Disparadores» y no «Triggers», que es como se llama la pantalla en el BFF. Esta consola
+            traduce el vocabulario de cara a quien la usa —el BFF tenía «Dashboard» y aquí es
+            «Sesiones»—, y quien administra una panadería no tiene por qué saber qué es un trigger. Lo
+            que NO se traduce son los valores que viajan por el cable: dentro de la pantalla los tipos
+            siguen siendo `keyword`, `fallback`, `escape`, `event_start` y `event_stop`, porque eso es
+            lo que la plataforma guarda.
+
+            ⚠️ CADA ENLACE QUE ENTRA AQUÍ ESTRECHA LA BARRA. Con el selector de empresas, esta fila ya
+            expulsó «Cerrar sesión» fuera del área visible una vez (regresión de T5.3, arreglada en
+            4ad4721). Los candados de barra_test.go vigilan que todo contenedor flex con controles
+            pueda FLUIR, que es lo que impide que lo que no quepa se salga en vez de bajar de línea —
+            pero ningún test de Go mide píxeles: esto se comprueba en un navegador.
+            */}}
+            <a href="/flujos" class="btn btn--text{{ if eq .CurrentPath "/flujos" }} btn--activo{{ end }}">Flujos</a>
+            <a href="/disparadores" class="btn btn--text{{ if eq .CurrentPath "/disparadores" }} btn--activo{{ end }}">Disparadores</a>
+            {{/*
+            LA BANDEJA (T7.2), que llega de wapp-guardian-bff en esta misma ola. Va DESPUÉS del
+            editor porque es la otra mitad del trabajo diario: el editor decide qué hace la
+            conversación, y esto es lo que la conversación trajo.
+
+            🔴 EL ENLACE NO ESTÁ GATEADO POR `cart_basic`, Y ES UNA DECISIÓN CON PRECIO. Gatearlo
+            exigiría que TODAS las pantallas resolvieran el plan —el enlace vive en el layout, no en
+            la página—, y esta consola lo resuelve SIN CACHÉ, una vez por petición: serían siete
+            llamadas más a /entitlements por navegación, en las seis pantallas que no lo necesitan.
+            El precio de NO gatearlo es que un tenant sin la feature ve el enlace y, al pulsarlo,
+            recibe un 403 con la pantalla que le explica que su plan no la incluye. Se prefiere ese
+            precio: la explicación existe, es accionable («habla con quien lleva la contratación») y
+            la puerta la cierra el gate por ruta, que es el que decide de verdad. Lo que NO se hace
+            en ningún caso es lo contrario —esconder el enlace y dejar la ruta abierta—, que es
+            exactamente el agujero que T7.2 vino a cerrar.
+
+            ⚠️ Y esto ESTRECHA LA BARRA un enlace más: es el séptimo. Ver el aviso de arriba.
+            */}}
+            <a href="/solicitudes" class="btn btn--text{{ if eq .CurrentPath "/solicitudes" }} btn--activo{{ end }}">Solicitudes</a>
+            {{/*
+            LA IMPORTACIÓN DE CATÁLOGO (T8.2), que llega de wapp-guardian-bff en esta misma ola. Va
+            la ÚLTIMA de la fila porque es la que menos se usa: el catálogo se sube de tarde en tarde
+            y lo demás es trabajo diario.
+
+            🔴 EL ENLACE NO ESTÁ GATEADO POR `catalog_import`, POR EL MISMO MOTIVO ESCRITO ARRIBA
+            para «Solicitudes» — y esta vez con un enlace más de precio. Gatearlo exigiría que TODAS
+            las pantallas resolvieran el plan, porque el enlace vive en el layout y no en la página, y
+            esta consola lo resuelve SIN CACHÉ, una vez por petición. El precio de NO gatearlo es que
+            una empresa sin la capacidad ve el enlace y, al pulsarlo, recibe un 403 con la pantalla
+            que le explica que su plan no la incluye. Lo que NO se hace en ningún caso es lo contrario
+            —esconder el enlace y dejar la ruta abierta—, que es el agujero que T7.2 vino a cerrar.
+
+            ⚠️ Y ESTO ESTRECHA LA BARRA UN ENLACE MÁS: es el OCTAVO de los que dependen de tener
+            empresa, y el NOVENO control de la fila contando «Inicio». Ver el aviso de arriba: esta
+            fila ya expulsó «Cerrar sesión» una vez, los candados de barra_test.go solo vigilan que
+            todo contenedor flex pueda FLUIR, y ningún test de Go mide píxeles.
+            */}}
+            {{/* `eq` y no un prefijo, como el resto de la fila: la única ruta que cuelga de ésta es
+                 la descarga de la plantilla, y ésa no pinta ninguna página que pueda marcarse. */}}
+            <a href="/importar-catalogo" class="btn btn--text{{ if eq .CurrentPath "/importar-catalogo" }} btn--activo{{ end }}">Catálogo</a>
+            {{/*
             El SELECTOR DE EMPRESAS (T5.3), y está aquí porque es el único punto que cubre las seis
             pantallas de una vez: cambiar de empresa es navegación, como cerrar sesión, no una
             operación de la tabla que se esté mirando.

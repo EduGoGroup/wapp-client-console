@@ -1,0 +1,38 @@
+{{/*
+EL PARTIAL DE TABLA (T6.2). Es el ARMAZÓN de una tabla de datos, no un framework de tablas: pinta
+`<table class="data-table">`, su `<caption>` y su `<thead>`, y deja el `<tbody>` a la pantalla.
+
+Por qué el armazón y no las filas: las cuatro tablas que ya existían (miembros, roles, invitaciones,
+sesiones) NO comparten una sola celda —una lleva chips, otra un `<form>` de baja con CSRF, otra un
+`<select>` de perfil—, pero las cuatro repetían las mismas diez líneas de andamiaje. Lo que se
+comparte es lo que se extrae; describir las CELDAS por parámetro habría pedido una bandera por
+columna, que es justo lo que la casilla prohíbe.
+
+Las filas entran por `yield` —el mismo mecanismo con el que el layout maestro ejecuta el fragmento de
+cada página—, porque html/template no sabe ejecutar una plantilla cuyo nombre sea una variable. A la
+plantilla de filas se le pasa el DOT DE LA PÁGINA, no la lista: así dentro de ella `$.CSRFToken`
+sigue significando lo mismo que significaba cuando la tabla estaba escrita inline, y una conversión
+no tiene que tocar ni una línea de las filas.
+
+⚠️ El sangrado literal (8/12/16 espacios) NO es cosmético por accidente: está calcado del de las
+cuatro tablas que ya existían, para que convertir una NO cambie ni un byte del HTML renderizado. Una
+tabla nueva se escribe a esa misma profundidad —dentro de un `.wapp-card`— y encaja sola.
+
+Campos que espera (tipo `tablaVista`, lo arma el helper `tabla`):
+  .ID           string    id del <table>; si va vacío, no se pinta el atributo
+  .Caption      string    texto del <caption> — OBLIGATORIO: una tabla sin título no se navega
+  .Columns      []string  encabezados, en orden
+  .RowsTemplate string    nombre de la plantilla que pinta los <tr> del cuerpo
+  .Page         any       el dot de la página, que se le pasa tal cual a esa plantilla
+*/}}
+{{ define "data_table" }}<table class="data-table"{{ if .ID }} id="{{ .ID }}"{{ end }}>
+            <caption class="data-table__caption">{{ .Caption }}</caption>
+            <thead>
+                <tr>{{ range .Columns }}
+                    <th scope="col">{{ . }}</th>{{ end }}
+                </tr>
+            </thead>
+            <tbody>
+                {{ yield .RowsTemplate .Page }}
+            </tbody>
+        </table>{{ end }}
