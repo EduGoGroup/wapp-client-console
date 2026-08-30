@@ -27,6 +27,17 @@ const entitlementsDataKey = "Entitlements"
 // que no entran en ningún paquete comercial y dejarían la rama ON sin ocurrir nunca fuera de `pro`.
 const featureCatalogImport = "catalog_import"
 
+// featureCartBasic es la capacidad que abre la BANDEJA DE SOLICITUDES (Plan 047 · T7.2).
+//
+// Es la MISMA clave con la que la plataforma gatea las diez rutas de la bandeja
+// (`RequireFeature("cart_basic")`), y esa sigue siendo la autoridad: aquí decide si esta consola
+// deja ENTRAR en la pantalla, allí decide si se PUEDE operar. Un gate de esta capa nunca sustituye
+// al del servidor; le ahorra el viaje y da la explicación en la voz de esta consola.
+//
+// 🔴 A diferencia de featureCatalogImport, esta NO gatea un bloque de plantilla: gatea la RUTA
+// entera, con middleware sobre el grupo. Ver solicitudes_gate.go.
+const featureCartBasic = "cart_basic"
+
 // entitlementsView es el plan del tenant tal como lo consume la plantilla.
 //
 // El gate de esta consola es SERVER-SIDE: el bloque de una sección sin feature NO SE EMITE en el
@@ -95,4 +106,33 @@ func entitlementsNotice(err error) string {
 	}
 	return "No se pudo consultar el plan de la empresa ahora mismo. " +
 		"Las secciones que dependen de una capacidad quedan ocultas hasta que se pueda comprobar."
+}
+
+// entitlementsContextKey es la clave con la que el GATE POR RUTA deja la vista del plan en el
+// contexto de gin para que el handler la reutilice (ver solicitudes_gate.go).
+//
+// 🔴 Es OTRA clave que entitlementsDataKey y no la misma por accidente: aquella nombra el dato en la
+// PLANTILLA y esta en el CONTEXTO de la petición. Son dos mapas distintos y confundirlos no daría un
+// error, daría un dato que aparece donde no se espera.
+const entitlementsContextKey = "wapp.entitlements"
+
+// entitlementsFromContext devuelve la vista del plan que sembró el gate.
+//
+// 🔑 Existe para que el coste se quede en UNA llamada por petición: el gate ya preguntó, y un
+// handler que volviera a llamar a resolveEntitlements pagaría el viaje dos veces (esta consola
+// resuelve el plan sin caché, una vez por petición).
+//
+// FAIL-CLOSED POR CONSTRUCCIÓN: si no hay nada sembrado —o hay algo de otro tipo— se devuelve la
+// vista CERO, cuyo mapa `enabled` es nil y por tanto `Has` da false para todo. No hay ninguna rama
+// que lo abra.
+func entitlementsFromContext(c *gin.Context) entitlementsView {
+	valor, ok := c.Get(entitlementsContextKey)
+	if !ok {
+		return entitlementsView{}
+	}
+	vista, ok := valor.(entitlementsView)
+	if !ok {
+		return entitlementsView{}
+	}
+	return vista
 }

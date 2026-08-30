@@ -47,7 +47,11 @@ func paginasRenderizadas(t *testing.T, router http.Handler) map[string]*httptest
 	// formularios, ni el bloque gateado por plan — que es justo donde se cuela un `style=` o un
 	// `<script>`. Un router aparte con el doble de la API pública los pinta enteros.
 	rutasAdmin := map[string]stubResponse{
-		"GET /api/v1/entitlements": {http.StatusOK, entitlementsBody("commerce", "catalog_import", "menu")},
+		// `cart_basic` va en el plan del doble desde la Ola 7: sin ella el gate por ruta corta con
+		// 403 y la bandeja —que es la superficie de HTML más grande de esta consola— quedaría
+		// fuera de esta familia sin que nadie lo notara. Su rama SIN la feature se captura aparte,
+		// más abajo.
+		"GET /api/v1/entitlements": {http.StatusOK, entitlementsBody("commerce", "catalog_import", "menu", featureCartBasic)},
 		"GET /api/v1/members":      {http.StatusOK, membersBody(testUserID, testOtherUserID)},
 		"GET /api/v1/roles":        {http.StatusOK, rolesBody},
 		// La pantalla de sesiones se pinta ENTERA —con su tabla, sus chips y su formulario—, que es
@@ -68,6 +72,11 @@ func paginasRenderizadas(t *testing.T, router http.Handler) map[string]*httptest
 		"GET /api/v1/flows":      {http.StatusOK, flowsBody(flowJSON(testFlowID, 3, "2026-08-01T10:00:00Z"))},
 		"GET /api/v1/flows/{id}": {http.StatusOK, flowDefinitionBody},
 		"GET /api/v1/triggers":   {http.StatusOK, triggersBody(disparadorSombreado, disparadorNormal)},
+		// La BANDEJA (T7.2): la lista con su tabla, su paginador y su formulario de descarte, y las
+		// DOS pantallas del descarte, que son HTML que ningún GET sirve.
+		"GET /api/v1/intakes": {http.StatusOK, laBandejaDeCampo()},
+		"POST /api/v1/intakes/discard": {http.StatusOK, descarteBody(
+			[]string{testIntakeID}, map[string]string{testOtroIntake: "live_event"})},
 	}
 	api := newStubAPI(t, rutasAdmin)
 	routerAdmin := adminRouter(api)
@@ -82,6 +91,7 @@ func paginasRenderizadas(t *testing.T, router http.Handler) map[string]*httptest
 		"flujo_nuevo":      rutaFlujos + "/" + flujoNuevo,
 		"flujo_detalle":    rutaFlujos + "/" + testFlowID,
 		"disparadores":     rutaDisparadores,
+		"solicitudes":      rutaSolicitudes + "?page_size=5",
 	} {
 		rec := getWithSession(t, routerAdmin, ruta)
 		if rec.Code != http.StatusOK {
@@ -118,6 +128,32 @@ func paginasRenderizadas(t *testing.T, router http.Handler) map[string]*httptest
 		}
 	}
 
+	// 🔴 LAS TRES PANTALLAS DE LA BANDEJA QUE NINGÚN GET SIRVE (T7.2). Las tres son HTML propio y
+	// ninguna se alcanza tecleando una URL: el 403 del gate por feature —la rama `sin_plan` de la
+	// plantilla— y los dos pasos del descarte, que llevan dentro los ids que se marcaron. Sin estas
+	// capturas quedarían fuera de los tests de CSP, de estilo inline y de JavaScript.
+	sesion := clientSessionCookie(t)
+	renders["solicitudes_descarte_confirmar"] = postFormWithCSRF(routerAdmin, rutaSolicitudesDescartar, url.Values{
+		"intake_id": {testIntakeID, testOtroIntake},
+	}, sesion)
+	renders["solicitudes_descarte_resultado"] = postFormWithCSRF(routerAdmin, rutaSolicitudesDescartar, url.Values{
+		"intake_id": {testIntakeID, testOtroIntake}, "action": {"discard"},
+	}, sesion)
+	for _, nombre := range []string{"solicitudes_descarte_confirmar", "solicitudes_descarte_resultado"} {
+		if rec := renders[nombre]; rec.Code != http.StatusOK {
+			t.Fatalf("el paso %q del descarte respondió %d, want 200. Body: %s", nombre, rec.Code, rec.Body.String())
+		}
+	}
+
+	apiSinPlan := newStubAPI(t, map[string]stubResponse{
+		rutaListadoDeEmpresas:      {http.StatusOK, unaEmpresa()},
+		"GET /api/v1/entitlements": {http.StatusOK, entitlementsBody("basic", "menu")},
+	})
+	renders["solicitudes_sin_plan"] = getWithSession(t, adminRouter(apiSinPlan), rutaSolicitudes)
+	if rec := renders["solicitudes_sin_plan"]; rec.Code != http.StatusForbidden {
+		t.Fatalf("la bandeja sin cart_basic respondió %d, want 403. Body: %s", rec.Code, rec.Body.String())
+	}
+
 	// Y las MISMAS pantallas en el estado «sin empresa», que es otra rama de plantilla —el parcial
 	// sin_empresa— y por tanto otro HTML que puede traer un style= o un <script> sin que ninguna de
 	// las capturas de arriba lo vea.
@@ -131,6 +167,7 @@ func paginasRenderizadas(t *testing.T, router http.Handler) map[string]*httptest
 		"mi_identificador_sin_empresa": "/mi-identificador",
 		"flujos_sin_empresa":           rutaFlujos,
 		"disparadores_sin_empresa":     rutaDisparadores,
+		"solicitudes_sin_empresa":      rutaSolicitudes,
 	} {
 		rec := getConCookie(routerAdmin, ruta, sinTenant)
 		if rec.Code != http.StatusOK {
@@ -195,6 +232,10 @@ func TestPaginas_TodasLasPantallasAutenticadasEstanCubiertas(t *testing.T) {
 		// registra el router, y se recorre con DOS peticiones: el valor mágico `nuevo` y un flujo de
 		// verdad, que son dos ramas distintas de la misma plantilla.
 		rutaFlujos: true, rutaFlujos + "/:id": true, rutaDisparadores: true,
+		// La bandeja (T7.2). Su GET se recorre con `?page_size=5`, que es lo que hace que el
+		// paginador se pinte: con el tamaño por defecto las siete solicitudes de campo caben en una
+		// página y el bloque del paginador no se emitiría.
+		rutaSolicitudes: true,
 	}
 	for ruta := range rutasGET {
 		if !cubiertas[ruta] {
@@ -203,6 +244,54 @@ func TestPaginas_TodasLasPantallasAutenticadasEstanCubiertas(t *testing.T) {
 	}
 	if len(rutasGET) != len(cubiertas) {
 		t.Errorf("el router sirve %d pantallas autenticadas y el mapa cubre %d", len(rutasGET), len(cubiertas))
+	}
+}
+
+// TestPaginas_LaFamiliaMiraLaRamaCOMPLETADeLaBandeja cierra el ÚNICO punto ciego que el gate por
+// ruta (T7.2) pudo abrir en esta familia, y lo cierra por escrito en vez de por suerte.
+//
+// 🔴 EL RIESGO, dicho entero: `/solicitudes` es la primera pantalla de esta consola cuya rama
+// PRINCIPAL solo se pinta si el plan trae una feature. Los candados de CSP, estilo inline y
+// JavaScript miran `rec.Body`, o sea el HTML que salió por el cable; si la captura de esta pantalla
+// fuera un 403 —su rama VACÍA—, los tres seguirían verdes midiendo una página sin tabla, sin
+// formularios y sin filas, que es justo donde se cuela un `style=` o un `<script>`.
+//
+// Hoy no pasa porque `rutasAdmin` mete `featureCartBasic` en el plan del doble, pero eso es un
+// ACOPLAMIENTO IMPLÍCITO entre dos sitios del mismo fichero: quien quitara esa feature de ahí —para
+// probar otra cosa— dejaría a la bandeja fuera del recorrido sin que nada fallara. Este test lo hace
+// explícito: exige que la captura `solicitudes` traiga las anclas de la rama completa y que la
+// captura `solicitudes_sin_plan` traiga las de la vacía. Las dos direcciones, para que ni una rama
+// se caiga del recorrido ni la otra deje de ser la otra.
+func TestPaginas_LaFamiliaMiraLaRamaCOMPLETADeLaBandeja(t *testing.T) {
+	t.Parallel()
+
+	renders := paginasRenderizadas(t, NewRouter(offlineConfig()))
+
+	completa, ok := renders["solicitudes"]
+	if !ok {
+		t.Fatal("la familia no captura `solicitudes`: la bandeja quedó fuera de los tests de CSP")
+	}
+	// Las cuatro anclas son de la rama que SOLO existe con `cart_basic`: la tarjeta del listado, la
+	// tabla, el formulario de descarte y el paginador. Ninguna se emite en la rama vacía.
+	for _, ancla := range []string{
+		`id="section-listado"`, `id="table-solicitudes"`, `id="form-descarte"`, `id="paginador"`,
+	} {
+		if !strings.Contains(completa.Body.String(), ancla) {
+			t.Errorf("la captura `solicitudes` no trae %s: la familia está escaneando la pantalla "+
+				"VACÍA y un style= o un <script> en la rama completa pasaría inadvertido", ancla)
+		}
+	}
+
+	vacia, ok := renders["solicitudes_sin_plan"]
+	if !ok {
+		t.Fatal("la familia no captura `solicitudes_sin_plan`: la rama del 403 quedó sin vigilar")
+	}
+	if !strings.Contains(vacia.Body.String(), `id="section-sin-plan"`) {
+		t.Error("la captura `solicitudes_sin_plan` no es la pantalla vacía: el gate dejó de cortar")
+	}
+	if strings.Contains(vacia.Body.String(), `id="section-listado"`) {
+		t.Error("la pantalla del 403 sirvió el listado: las dos capturas son la misma rama y una de " +
+			"las dos dejó de probar algo")
 	}
 }
 

@@ -183,6 +183,36 @@ const (
 	flashTriggerEventStopWithoutKey  = "trigger_event_stop_without_keyword"
 	flashTriggerKindUnknown          = "trigger_kind_unknown"
 
+	// --- Desenlaces de la BANDEJA DE SOLICITUDES (T7.2) ---
+	//
+	// 🔴 Los TRES que hay aquí son los desenlaces de la API. Lo que NO sale de esta tabla son los
+	// avisos CON NÚMEROS del descarte —«se descartaron 3 de 5», «marcaste 250 y caben 200»—, y es
+	// deliberado: el catálogo traduce códigos a textos FIJOS y no interpola datos, así que un aviso
+	// que sin su número no dice nada no cabe aquí. Viajan como vista y los pinta la pantalla; ver
+	// avisoSolicitudes.
+
+	// flashSolicitudesFiltrosInvalidos traduce el 400 del listado, que es su único rechazo
+	// accionable: una fecha ilegible, un estado que no existe o un orden desconocido. El genérico
+	// diría «revisa lo que escribiste» sobre un formulario de cuatro filtros, sin decir cuál.
+	flashSolicitudesFiltrosInvalidos = "solicitudes_filtros_invalidos"
+	// flashSolicitudesSinPlan traduce el 403 con `feature_not_enabled` que devuelve la plataforma.
+	//
+	// 🔴 Llega cuando el gate por ruta de esta consola dijo que sí y la plataforma dijo que no, o sea
+	// cuando el plan cambió entre las dos. NO puede caer en el genérico «tu usuario no tiene
+	// permiso»: no es un permiso lo que falta, es lo contratado, y quien lo lee tiene que saber que
+	// la salida está en la contratación y no en pedirle un rol a nadie.
+	flashSolicitudesSinPlan = "solicitudes_sin_plan"
+	// flashDescarteRechazado traduce el 400 del descarte: el lote no llegó a ejecutarse y no se tocó
+	// ninguna solicitud. Ese «no se tocó ninguna» es lo que hace falta decir y lo que el genérico no
+	// dice, sobre una operación sin vuelta atrás.
+	flashDescarteRechazado = "descarte_rechazado"
+	// flashDescarteIncierto es el desenlace más incómodo de esta pantalla, y su texto es incómodo a
+	// propósito: cada solicitud del lote es su propia unidad de trabajo en la plataforma, así que un
+	// fallo a media faena deja escrito lo ya escrito. Prometer que «no se ha cambiado nada» sería
+	// mentir, y lo único honesto es mandar a mirar la bandeja — sabiendo que repetir el mismo lote es
+	// seguro, porque lo ya descartado vuelve como `already_discarded`.
+	flashDescarteIncierto = "descarte_incierto"
+
 	// --- Desenlaces del SELECTOR DE EMPRESAS (T5.3) ---
 
 	// flashTenantNotYours traduce el 404 de POST /api/v1/auth/active-tenant.
@@ -307,6 +337,15 @@ var (
 		flashTriggerEventStopWithoutKey: "Un disparador de tipo event_stop necesita la palabra clave que desactiva el evento.",
 		flashTriggerKindUnknown: "Elige un tipo de disparador de la lista: keyword, fallback, escape, event_start " +
 			"o event_stop.",
+		flashSolicitudesFiltrosInvalidos: "La plataforma rechazó los filtros. Revisa las fechas " +
+			"(AAAA-MM-DD) y el estado, y vuelve a filtrar.",
+		flashSolicitudesSinPlan: "El plan de tu empresa ya no incluye la bandeja de solicitudes. " +
+			"No es cosa de tus permisos: habla con quien lleva la contratación.",
+		flashDescarteRechazado: "La plataforma rechazó el descarte, así que NO se tocó ninguna " +
+			"solicitud. Revisa lo que marcaste y vuelve a intentarlo.",
+		flashDescarteIncierto: "No se pudo saber si el descarte llegó a hacerse. Mira la bandeja " +
+			"ANTES de repetirlo; volver a mandar el mismo lote es seguro, porque lo que ya esté " +
+			"descartado se queda como está.",
 	})
 
 	flashSuccesses = sharedweb.NewFlashCatalog("Acción completada.", map[string]string{
@@ -478,4 +517,54 @@ func flashCodeForEditor(err error) string {
 	default:
 		return flashCodeFor(err)
 	}
+}
+
+// flashCodeForSolicitudes es el traductor del LISTADO de la bandeja, y existe por lo mismo que
+// flashCodeForSessions o flashCodeForEditor: hay desenlaces cuyo significado es propio de este plano
+// y que el traductor general se comería.
+//
+// 🔴 EL ORDEN DE LAS DOS RAMAS ES CONTRATO, y por la razón de siempre —el específico envuelve al
+// genérico—, con un matiz que conviene dejar escrito porque no se ve en el código de aquí:
+// `*apiclient.FeatureNotEnabledError` DESENVUELVE a ErrForbidden (apiclient/intakes.go), así que
+// preguntar antes por ErrForbidden se comería el único desenlace que manda a la contratación en vez
+// de a pedir permisos, y todo seguiría verde.
+func flashCodeForSolicitudes(err error) string {
+	if _, ok := apiclient.FeatureNotEnabledOf(err); ok {
+		return flashSolicitudesSinPlan
+	}
+	if errors.Is(err, apiclient.ErrInvalidInput) {
+		return flashSolicitudesFiltrosInvalidos
+	}
+	return flashCodeFor(err)
+}
+
+// flashCodeForDescarte es el traductor del DESCARTE, y es OTRO que el del listado por UN desenlace:
+// el genérico.
+//
+// Leer una bandeja que no contesta es «inténtalo de nuevo en un momento». Un descarte que no
+// contesta NO lo es: la petición salió, cada solicitud del lote es su propia unidad de trabajo en la
+// plataforma y lo que se haya escrito queda escrito. Ahí el consejo útil es mirar antes de repetir,
+// y ese es un consejo que el texto genérico no da.
+//
+// El 400 tiene el mismo trato por el mismo motivo: sobre una operación irreversible, «revisa lo que
+// escribiste» se calla lo único que importa —que no se descartó ninguna—.
+func flashCodeForDescarte(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case featureAusente(err):
+		return flashSolicitudesSinPlan
+	case errors.Is(err, apiclient.ErrInvalidInput):
+		return flashDescarteRechazado
+	}
+	if code := flashCodeFor(err); code != flashUpstreamUnavailable {
+		return code
+	}
+	return flashDescarteIncierto
+}
+
+// featureAusente dice si el rechazo es el 403 de capacidad que falta.
+func featureAusente(err error) bool {
+	_, ok := apiclient.FeatureNotEnabledOf(err)
+	return ok
 }

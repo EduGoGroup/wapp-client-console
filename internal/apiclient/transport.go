@@ -34,6 +34,22 @@ import (
 // que un cliente mal construido no se cuelgue para siempre.
 const defaultTimeout = 15 * time.Second
 
+// DefaultInferenceTimeout es el plazo del cliente de INFERENCIA (ver Transport.inference).
+//
+// 🔴 55s, y el número no es holgura por si acaso. Medido contra UAT el 2026-08-28 desde el BFF, la
+// sugerencia de cotización tardó 24,8 / 28,4 / 29,7 / 35,5 segundos con el modelo ya cargado, y el
+// cloud se da a sí mismo 48s para redactar (`pipeline.PlazoPorLlamadaSuelo`), así que el techo
+// realista de la respuesta es ~48-50s: 55s = eso más el viaje y el cierre. El plazo general de esta
+// consola son 15s (o los 20s que pone la config), y por ahí esa llamada no cabe: muere sin
+// respuesta.
+//
+// ⚠️ Este plazo arregla UN plazo de los tres, y solo el de este cliente HTTP. Los otros dos son del
+// servidor de la consola —`RequestDeadline(UpstreamTimeout)` (20s) en el router y `WriteTimeout`
+// (30s)— y siguen cortando por debajo: quien monte la PANTALLA de la sugerencia tendrá que darle su
+// propio plazo a esa ruta, como hizo el BFF en el Plan 047 · T2.4. Aquí no se toca nada de eso: esta
+// casilla es el cliente.
+const DefaultInferenceTimeout = 55 * time.Second
+
 // maxErrorBody acota lo que se lee del cuerpo de un no-2xx. El detalle del upstream NO se pinta al
 // usuario (el código HTTP y el catálogo de flash deciden el texto), pero sí se registra, y un
 // upstream que responda megabytes no debe poder llenar el log.
@@ -123,6 +139,18 @@ func StatusCodeOf(err error) int {
 type Transport struct {
 	baseURL string
 	http    *http.Client
+
+	// inference es el cliente de las llamadas que ESPERAN A UN MODELO. Hoy hay UNA sola
+	// —IntakesClient.SuggestIntakeQuote— y un test estructural vigila que siga siendo una sola.
+	//
+	// 🔴 EXISTE PORQUE http.Client.Timeout NO SE PUEDE SOBRESCRIBIR POR PETICIÓN: es un campo del
+	// cliente, no del request, y entre el plazo del cliente y el del contexto gana SIEMPRE el menor.
+	// Un ctx de 58s sobre un cliente de 15s se sigue cortando a los 15s, así que el único modo de
+	// darle a UNA llamada un plazo mayor sin dárselo a todas es que esa llamada use OTRO cliente.
+	//
+	// Comparte el RoundTripper (los dos van con Transport nil == http.DefaultTransport), así que
+	// comparte el pool de conexiones con el general: lo que cambia es el plazo, no el cable.
+	inference *http.Client
 }
 
 // NewTransport construye el transporte contra la API pública. Un timeout <= 0 cae a defaultTimeout:
@@ -132,8 +160,9 @@ func NewTransport(baseURL string, timeout time.Duration) *Transport {
 		timeout = defaultTimeout
 	}
 	return &Transport{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		http:    &http.Client{Timeout: timeout},
+		baseURL:   strings.TrimRight(baseURL, "/"),
+		http:      &http.Client{Timeout: timeout},
+		inference: &http.Client{Timeout: DefaultInferenceTimeout},
 	}
 }
 
@@ -169,6 +198,41 @@ func (t *Transport) do(req *http.Request, op string, translate func(string, int)
 		status := resp.StatusCode
 		drainClose(resp.Body)
 		return nil, translate(op, status)
+	}
+	return resp, nil
+}
+
+// doTyped es `do` para los planos cuyo no-2xx trae un CUERPO que hay que leer para saber QUÉ pasó.
+//
+// La diferencia con `do` es una sola y es la razón de que existan los dos: `do` drena el cuerpo y le
+// pasa al traductor solo el status, porque en el plano de administración el código HTTP es toda la
+// información. En la bandeja NO lo es —el 400 de aprobar puede ser «faltan precios» (con la lista
+// entera) o «falta el texto», y el 422 puede ser «este estado no aprueba» o «otro operador la
+// movió», y a los cuatro solo los separa la clave `error` del cuerpo—, así que el traductor tiene
+// que verlo.
+//
+// El traductor recibe la respuesta VIVA y este método la cierra después: quien traduzca lee lo que
+// necesite (acotado) y no se ocupa del cierre.
+func (t *Transport) doTyped(req *http.Request, op string, translate func(string, *http.Response) error) (*http.Response, error) {
+	return t.doWith(t.http, req, op, translate)
+}
+
+// doInference es doTyped por el cliente de plazo largo. ÚNICO llamante permitido:
+// IntakesClient.SuggestIntakeQuote (ver Transport.inference); hay un test estructural que lo cuenta.
+func (t *Transport) doInference(req *http.Request, op string, translate func(string, *http.Response) error) (*http.Response, error) {
+	return t.doWith(t.inference, req, op, translate)
+}
+
+// doWith es el viaje compartido por doTyped y doInference: lo único que cambia entre los dos es el
+// http.Client, y por tanto el plazo.
+func (t *Transport) doWith(client *http.Client, req *http.Request, op string, translate func(string, *http.Response) error) (*http.Response, error) {
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("apiclient: %s: %w", op, err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		defer drainClose(resp.Body)
+		return nil, translate(op, resp)
 	}
 	return resp, nil
 }

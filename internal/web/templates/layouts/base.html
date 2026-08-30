@@ -55,6 +55,25 @@
             <a href="/flujos" class="btn btn--text{{ if eq .CurrentPath "/flujos" }} btn--activo{{ end }}">Flujos</a>
             <a href="/disparadores" class="btn btn--text{{ if eq .CurrentPath "/disparadores" }} btn--activo{{ end }}">Disparadores</a>
             {{/*
+            LA BANDEJA (T7.2), que llega de wapp-guardian-bff en esta misma ola. Va DESPUÉS del
+            editor porque es la otra mitad del trabajo diario: el editor decide qué hace la
+            conversación, y esto es lo que la conversación trajo.
+
+            🔴 EL ENLACE NO ESTÁ GATEADO POR `cart_basic`, Y ES UNA DECISIÓN CON PRECIO. Gatearlo
+            exigiría que TODAS las pantallas resolvieran el plan —el enlace vive en el layout, no en
+            la página—, y esta consola lo resuelve SIN CACHÉ, una vez por petición: serían siete
+            llamadas más a /entitlements por navegación, en las seis pantallas que no lo necesitan.
+            El precio de NO gatearlo es que un tenant sin la feature ve el enlace y, al pulsarlo,
+            recibe un 403 con la pantalla que le explica que su plan no la incluye. Se prefiere ese
+            precio: la explicación existe, es accionable («habla con quien lleva la contratación») y
+            la puerta la cierra el gate por ruta, que es el que decide de verdad. Lo que NO se hace
+            en ningún caso es lo contrario —esconder el enlace y dejar la ruta abierta—, que es
+            exactamente el agujero que T7.2 vino a cerrar.
+
+            ⚠️ Y esto ESTRECHA LA BARRA un enlace más: es el séptimo. Ver el aviso de arriba.
+            */}}
+            <a href="/solicitudes" class="btn btn--text{{ if eq .CurrentPath "/solicitudes" }} btn--activo{{ end }}">Solicitudes</a>
+            {{/*
             El SELECTOR DE EMPRESAS (T5.3), y está aquí porque es el único punto que cubre las seis
             pantallas de una vez: cambiar de empresa es navegación, como cerrar sesión, no una
             operación de la tabla que se esté mirando.

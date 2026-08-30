@@ -251,6 +251,23 @@ func NewRouterWithLimiter(cfg *config.Config) (*gin.Engine, func()) {
 	protected.POST(rutaDisparadores, adminH.CreateTrigger)
 	protected.POST(rutaDisparadores+"/:id/borrar", adminH.DeleteTrigger)
 
+	// LA BANDEJA DE SOLICITUDES (T7.2): lo que los clientes pidieron por WhatsApp. Mudada de
+	// wapp-guardian-bff, que se queda sin ella en este mismo ciclo (T7.7).
+	//
+	// 🔒 ES EL PRIMER GRUPO DE ESTA CONSOLA CON GATE POR FEATURE, y va como MIDDLEWARE SOBRE EL
+	// GRUPO y no como un `if` dentro de cada handler: el BFF copió ese `if` en cinco sitios y por eso
+	// su GET y sus POST acabaron respondiendo códigos distintos ante la misma ausencia de feature sin
+	// que nadie lo decidiera. Aquí, quien añada una ruta de solicitudes la registra dentro del grupo
+	// y hereda el gate sin acordarse de él. El porqué del 403 y del fail-closed está en
+	// solicitudes_gate.go.
+	//
+	// El verbo estático `descartar` se registra dentro del grupo; cuando llegue el detalle `/:id`
+	// (T7.3) irá DESPUÉS, que es la regla de esta casa (mismo criterio que /sesiones/enviar).
+	solicitudes := protected.Group(rutaSolicitudes)
+	solicitudes.Use(adminH.requiereFeature(featureCartBasic, plantillaSolicitudes, tituloSolicitudes))
+	solicitudes.GET("", adminH.ShowSolicitudes)
+	solicitudes.POST(rutaDescartarSufijo, adminH.DescartarSolicitudes)
+
 	var cleanup func()
 	if rateLimiter != nil {
 		cleanup = rateLimiter.Close
@@ -286,6 +303,11 @@ func parseTemplates() *template.Template {
 		// no sabe construir un valor compuesto, y describir la tabla en el handler la alejaría de la
 		// pantalla que la pinta. Ver table_view.go.
 		"tabla": tabla,
+		// `statusLabel` traduce la clave del ciclo de vida de una solicitud al nombre con el que la
+		// dueña del negocio la llama. Es helper de plantilla y no un campo de la vista porque lo usan
+		// las DOS pantallas de la bandeja —la lista y, cuando llegue, el detalle— sobre listas que
+		// vienen crudas de la API. Ver solicitudes_estado.go.
+		"statusLabel": statusLabel,
 	})
 	tmpl, err := root.ParseFS(templatesFS,
 		"templates/layouts/*.html",

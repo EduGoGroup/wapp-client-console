@@ -153,7 +153,12 @@ func TestFlash_TodosLosCodigosDeLasPantallasTienenTexto(t *testing.T) {
 		flashFlowInvalidJSON, flashFlowVersionConflict, flashTriggerDuplicate, flashTriggerWithoutEventStart,
 		flashTriggerPriorityNotInteger, flashTriggerKeywordIncomplete, flashTriggerFallbackWithoutFlow,
 		flashTriggerEscapeWithoutKeyword, flashTriggerEventStartNoKeyword, flashTriggerEventStartNoKind,
-		flashTriggerEventKindUnknown, flashTriggerEventStopWithoutKey, flashTriggerKindUnknown} {
+		flashTriggerEventKindUnknown, flashTriggerEventStopWithoutKey, flashTriggerKindUnknown,
+		// Los de la BANDEJA (T7.2). Los avisos CON NÚMEROS del descarte no están aquí y no pueden
+		// estarlo: el catálogo traduce códigos a textos fijos y no interpola datos (ver
+		// avisoSolicitudes), así que «se descartaron 3 de 5» viaja como vista y lo pinta la pantalla.
+		flashSolicitudesFiltrosInvalidos, flashSolicitudesSinPlan, flashDescarteRechazado,
+		flashDescarteIncierto} {
 		if !flashErrors.Known(code) {
 			t.Errorf("el código de error %q no tiene texto", code)
 		}

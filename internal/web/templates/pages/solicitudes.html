@@ -1,0 +1,274 @@
+{{ define "solicitudes.html" }}
+<section class="page-wide">
+    {{ if .SinEmpresa }}
+    {{ template "sin_empresa" . }}
+    {{/*
+    GATE SERVER-SIDE POR FEATURE. Sin `cart_basic` el bloque entero NO SE EMITE: no queda escondido
+    por CSS ni por JS —que además la CSP endurecida de esta consola no permitiría sin nonce—, no está
+    en el HTML.
+
+    🔴 ESTE GATE YA NO ES EL QUE DECIDE SI SE ENTRA: eso lo hace el middleware del grupo, que corta
+    con 403 ANTES de renderizar (solicitudes_gate.go). Esta rama es lo que ese 403 pinta, y la razón
+    de que siga siendo un `if` de plantilla y no una página aparte es que así la denegación llega con
+    el marco entero —la barra, la empresa activa y la navegación— en vez de con un error suelto.
+    */}}
+    {{ else if $.Entitlements.Has "cart_basic" }}
+    <div class="wapp-card">
+        <h1 class="wapp-title">Solicitudes</h1>
+        <p class="wapp-subtitle">
+            Lo que tus clientes han pedido por WhatsApp. El contacto se identifica con su código
+            interno: esta consola no resuelve nombres ni teléfonos.
+        </p>
+
+        {{ template "flashes" . }}
+
+        {{/*
+        El aviso CON NÚMEROS del descarte. No sale del catálogo de flash y no puede salir: «se
+        descartaron 3 de 5» sin el número no dice nada, y el catálogo traduce códigos a textos fijos.
+        Ver avisoSolicitudes.
+        */}}
+        {{ with .Aviso }}
+        <div class="wapp-snackbar {{ if .Exito }}wapp-snackbar--success{{ else }}wapp-snackbar--error{{ end }}"
+             role="alert" id="aviso-solicitudes">{{ .Mensaje }}</div>
+        {{ end }}
+    </div>
+
+    {{/*
+    EL DESCARTE POR LOTES. Dos tarjetas que NUNCA salen a la vez: la que pregunta antes de escribir y
+    la que cuenta qué pasó después.
+    */}}
+    {{ with .Descarte }}
+    {{ if .Confirmando }}
+    <div class="wapp-card card-stacked" id="section-descarte-confirmar">
+        <h2 class="section-title">Confirma el descarte</h2>
+        {{/*
+        La advertencia va ARRIBA y en prosa, no en un `confirm()` del navegador: esta consola no emite
+        JS y, sobre todo, un diálogo del navegador no puede enseñar la lista de abajo — que es lo
+        único que convierte esto en una decisión informada.
+
+        🔴 REDACCIÓN FIJADA POR D-044.47 §3, y no es copy: los dos textos que estuvieron en liza se
+        CONTRADECÍAN. Uno decía «no se puede deshacer y no hay papelera» —que sugiere borrado— y el
+        otro «quedarán como abandonadas, no se borra nada» —que se callaba la irreversibilidad—. Las
+        dos cosas son ciertas a la vez y el mensaje dice las dos. El singular es de esta plantilla:
+        «1 solicitudes» haría dudar de si la consola sabe lo que va a descartar.
+        */}}
+        <div class="wapp-snackbar wapp-snackbar--error" role="alert">Vas a descartar {{ len .Seleccionadas }} {{ if eq (len .Seleccionadas) 1 }}solicitud. Quedará marcada como <strong>abandonada</strong>{{ else }}solicitudes. Quedarán marcadas como <strong>abandonadas</strong>{{ end }} —no se borra nada— pero <strong>esto no se puede deshacer</strong>.</div>
+        <p class="section-note">
+            Salen de lo que tienes pendiente, pero lo que pidió el cliente sigue guardado —sus líneas
+            y su historial se pueden consultar— y al cliente NO se le avisa.
+        </p>
+
+        {{ template "data_table" (tabla $ "table-descarte-confirmar" "Solicitudes que se van a descartar" "solicitudes_descarte_filas" "Solicitud" "Contacto" "Sesión" "Estado" "Total") }}
+
+        {{/*
+        El lote viaja ENTERO otra vez en vez de guardarse entre pasos: así se descarta exactamente lo
+        que se acaba de enseñar, aunque haya dos pestañas abiertas.
+
+        🔴 «Cancelar» va PRIMERO y con `autofocus` (REQ-32f(a)): la salida segura es el foco inicial y
+        la primera parada del tabulador, así que quien llega por teclado y pulsa Enter CANCELA. En el
+        BFF, antes de ese arreglo, descartaba — porque el único elemento enfocable del formulario era
+        el botón que escribe (los `hidden` no lo son). Cancelar sigue siendo un `<a>`: es navegación,
+        no una acción del formulario. Eso basta mientras este formulario NO tenga campos de texto,
+        porque el envío implícito con Enter solo se dispara desde un campo; el día que se le añada uno
+        —un motivo, por ejemplo—, hay que hacer que la acción destructiva deje de ser el primer
+        `submit`.
+        */}}
+        <form method="POST" action="{{ .Accion }}" class="actions-row" autocomplete="off" id="form-descarte-confirmar">
+            <input type="hidden" name="csrf_token" value="{{ $.CSRFToken }}">
+            {{ range .Seleccionadas }}
+            <input type="hidden" name="intake_id" value="{{ .ID }}">
+            {{ end }}
+            <a href="{{ .CancelarURL }}" class="btn btn--text" autofocus>Cancelar</a>
+            <button type="submit" class="btn btn--danger" name="action" value="discard">Descartar definitivamente</button>
+        </form>
+    </div>
+    {{ end }}
+
+    {{ if .Hecho }}
+    <div class="wapp-card card-stacked" id="section-descarte-resultado">
+        <h2 class="section-title">Qué pasó con cada solicitud</h2>
+        {{/*
+        El desglose se pinta SIEMPRE entero. Un lote mixto es lo NORMAL, y resumirlo a «listo»
+        escondería que hay solicitudes que siguen en la bandeja.
+        */}}
+        {{ if .Descartadas }}
+        <p class="section-note">Descartadas ({{ len .Descartadas }} de {{ .Total }}):</p>
+        <ul class="chip-list">
+            {{ range .Descartadas }}
+            <li class="wapp-chip wapp-chip--neutral mono">{{ . }}</li>
+            {{ end }}
+        </ul>
+        {{ else }}
+        <p class="section-note">No se descartó ninguna de las {{ .Total }} que mandaste.</p>
+        {{ end }}
+
+        {{ if .Saltadas }}
+        <p class="section-note">Siguen en tu bandeja ({{ len .Saltadas }} de {{ .Total }}), una por una:</p>
+        {{ template "data_table" (tabla $ "table-descarte-saltadas" "Solicitudes que NO se descartaron" "solicitudes_saltadas_filas" "Solicitud" "Por qué no se descartó") }}
+        {{ end }}
+    </div>
+    {{ end }}
+    {{ end }}
+
+    <div class="wapp-card card-stacked" id="section-filtros">
+        <h2 class="section-title">Filtrar</h2>
+        {{/*
+        🔑 LOS FILTROS VIAJAN EN LA QUERY Y NO EN ESTADO DE SERVIDOR, y por eso sobreviven al cambio
+        de página: el paginador arma sus enlaces con los mismos valores (ver solicitudFiltradaURL), y
+        el POST del descarte los lee con el MISMO filtroDeLaQuery que este GET. Una bandeja con el
+        filtro guardado en el servidor le enseñaría a dos pestañas la misma página.
+        */}}
+        <form method="GET" action="/solicitudes" class="stack-form" id="form-filtros" autocomplete="off">
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="from">Desde</label>
+                <input class="wapp-field__control" type="date" id="from" name="from" value="{{ .Filtro.Desde }}">
+            </div>
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="to">Hasta</label>
+                <input class="wapp-field__control" type="date" id="to" name="to" value="{{ .Filtro.Hasta }}">
+            </div>
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="status">Estado</label>
+                <select class="wapp-field__control" id="status" name="status">
+                    <option value="" {{ if not $.Filtro.Estado }}selected{{ end }}>todos</option>
+                    {{ range .EstadoOptions }}
+                    <option value="{{ .Clave }}" {{ if eq $.Filtro.Estado .Clave }}selected{{ end }}>{{ .Etiqueta }}</option>
+                    {{ end }}
+                </select>
+            </div>
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="session">Sesión</label>
+                <input class="wapp-field__control mono" type="text" id="session" name="session"
+                       value="{{ .Filtro.Sesion }}" maxlength="128" placeholder="identificador de sesión">
+            </div>
+            <div class="actions-row">
+                <button type="submit" class="btn btn--primary">Filtrar</button>
+                <a href="/solicitudes" class="btn btn--text">Limpiar</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="wapp-card card-stacked" id="section-listado">
+        {{ if .SolicitudesError }}
+        <p class="section-note" id="solicitudes-degradado">
+            No hay nada que mostrar hasta que la plataforma vuelva a responder. Los filtros de arriba
+            siguen sirviendo: cuando vuelva, vuelve a filtrar.
+        </p>
+        {{ else if .Solicitudes }}
+        {{/*
+        El listado va DENTRO del formulario de descarte: marcar es SELECCIONAR, y el botón de abajo
+        solo lleva a la pantalla de confirmación —nunca descarta—. El que escribe vive en la tarjeta
+        de confirmación, después de haber enseñado qué se va a descartar.
+        */}}
+        <form method="POST" action="{{ .DescartarURL }}" autocomplete="off" id="form-descarte">
+            <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+            {{/*
+            LA CASILLA MAESTRA «toda esta página». Marca los ids de ESTA PÁGINA, jamás «todo lo que
+            cumpla el filtro»: la diferencia entre descartar las 5 que se están mirando y las 4.000
+            que hay detrás, sobre una acción sin vuelta atrás. Y no lo garantiza una promesa del
+            handler: los ids viajan en los ocultos `visible_intake_id` que emite el `range` de abajo,
+            o sea EXACTAMENTE las filas que se pintaron. No hay ningún conjunto más ancho al alcance
+            de este formulario.
+
+            🔴 VA FUERA DE LA TABLA, y ahí está la diferencia con el BFF, que la metía en un `<th>`:
+            el partial `data_table` recibe los encabezados como TEXTO y los escapa, así que una
+            casilla dentro de un encabezado se serviría como literal `<input …>`. Con etiqueta propia
+            además se lee mejor que una casilla desnuda en una cabecera.
+
+            Sin JS: esta casilla no marca las de abajo en el navegador —no hay quien lo haga—, le dice
+            al servidor «toda la página», y el paso de revisar enseña una por una qué se va a
+            descartar antes de escribir nada.
+            */}}
+            <p class="section-note">
+                <label for="select-visible">
+                    <input type="checkbox" id="select-visible" name="select_visible" value="1">
+                    Marcar las {{ len .Solicitudes }} solicitudes de esta página
+                </label>
+            </p>
+            {{ template "data_table" (tabla . "table-solicitudes" "Solicitudes recibidas por WhatsApp" "solicitudes_filas" "Descartar" "Solicitud" "Contacto" "Sesión" "Estado" "Total" "Creada (UTC)") }}
+            <p class="actions-row">
+                <button type="submit" class="btn btn--primary" name="action" value="review">Revisar el descarte de lo marcado</button>
+            </p>
+        </form>
+
+        {{ with .Pager }}
+        <p class="actions-row" id="paginador">
+            <span class="section-note">{{ .DesdeFila }}–{{ .HastaFila }} de {{ .Total }} · página {{ .Pagina }} de {{ .Paginas }}</span>
+            {{ if .HayAnterior }}<a href="{{ .AnteriorURL }}" class="btn btn--text">Anterior</a>{{ end }}
+            {{ if .HaySiguiente }}<a href="{{ .SiguienteURL }}" class="btn btn--text">Siguiente</a>{{ end }}
+        </p>
+        {{ end }}
+        {{ else }}
+        <p class="empty-state" id="solicitudes-vacio">No hay solicitudes que casen con estos filtros.</p>
+        {{ end }}
+    </div>
+    {{ else }}
+    <div class="wapp-card" id="section-sin-plan">
+        <h1 class="wapp-title">Solicitudes</h1>
+        <p class="wapp-subtitle">
+            El plan de tu empresa no incluye la bandeja de solicitudes, así que esta pantalla no
+            tiene nada que enseñarte. No es cosa de tus permisos ni un fallo: habla con quien lleva
+            la contratación si la necesitas.
+        </p>
+    </div>
+    {{ end }}
+</section>
+{{ end }}
+
+{{/*
+LAS FILAS del listado. El partial le pasa a esta plantilla el DOT DE LA PÁGINA, no la lista, y por
+eso dentro de ella `$` sigue significando lo mismo que en la página.
+*/}}
+{{ define "solicitudes_filas" }}{{ range .Solicitudes }}
+                <tr>
+                    {{/*
+                    La casilla se ofrece en TODAS las filas, también en las que la plataforma va a
+                    rechazar. No es un descuido: quién es descartable lo decide la plataforma y no lo
+                    publica, así que filtrarlo aquí exigiría un tercer espejo del ciclo de vida — y un
+                    espejo desfasado dejaría a la dueña sin poder limpiar justo lo que vino a limpiar.
+                    Lo que sí llega es la respuesta POR ÍTEM, que dice de cada una qué pasó.
+
+                    El oculto ACOMPAÑA a la casilla y no la sustituye: la casilla es lo que se marca a
+                    mano, y el oculto es lo que hace de esta fila parte de «toda la página». Un
+                    `hidden` viaja SIEMPRE, así que la lista de la página llega entera aunque no se
+                    marque ninguna — y por eso el handler la lee solo cuando la maestra viene marcada.
+                    */}}
+                    <td><input type="checkbox" name="intake_id" value="{{ .ID }}"
+                               aria-label="Marcar para descartar la solicitud {{ .ID }}"><input
+                               type="hidden" name="visible_intake_id" value="{{ .ID }}"></td>
+                    <td class="mono">{{ .ID }}</td>
+                    <td class="mono">{{ .ContactID }}</td>
+                    <td class="mono">{{ .SessionID }}</td>
+                    {{/*
+                    LA MARCA `overdue` VA PEGADA AL ESTADO Y NUNCA EN SU LUGAR: `overdue` NO es un
+                    estado, es un aviso sobre una solicitud que sigue VIVA y que lleva demasiado
+                    esperando. La plataforma lo publica ya calculado y no cambia nada por su culpa: ni
+                    el estado, ni las transiciones. Y NO es `expired`, que sí es un estado —terminal y
+                    legado— y se pinta con su propio nombre por la vía normal de statusLabel. Si esta
+                    marca dijera «vencido», la dueña leería que la solicitud ya no sirve, que es
+                    exactamente lo contrario.
+                    */}}
+                    <td><span class="wapp-chip wapp-chip--neutral">{{ statusLabel .Status }}</span>{{ if .Overdue }}<span class="wapp-chip wapp-chip--danger">sin responder hace más de {{ $.HorasSinResponder }} h</span>{{ end }}</td>
+                    <td>{{ printf "%.2f" .Total }}</td>
+                    <td>{{ .CreatedAt }}</td>
+                </tr>
+                {{ end }}{{ end }}
+
+{{/* LAS FILAS del lote que espera confirmación. Llegan ya redactadas: aquí no se calcula nada. */}}
+{{ define "solicitudes_descarte_filas" }}{{ range .Descarte.Seleccionadas }}
+                <tr>
+                    <td class="mono">{{ .ID }}{{ if not .Listada }}<span class="section-note">ya no aparece en la bandeja que estás mirando: se descartará igual si sigue siendo tuya</span>{{ end }}</td>
+                    <td class="mono">{{ .ContactID }}</td>
+                    <td class="mono">{{ .SessionID }}</td>
+                    <td>{{ .Estado }}</td>
+                    <td>{{ .Total }}</td>
+                </tr>
+                {{ end }}{{ end }}
+
+{{/* LAS FILAS de lo que NO se descartó, con el motivo ya en la voz de la dueña. */}}
+{{ define "solicitudes_saltadas_filas" }}{{ range .Descarte.Saltadas }}
+                <tr>
+                    <td class="mono">{{ .ID }}</td>
+                    <td>{{ .Razon }}</td>
+                </tr>
+                {{ end }}{{ end }}

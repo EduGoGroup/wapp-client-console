@@ -674,6 +674,7 @@ func TestSinEmpresa_TodaPantallaQueLoPintaOfreceElMISMOCanje(t *testing.T) {
 		// depende de que exista un flujo.
 		"flujo.html":        rutaFlujos + "/" + flujoNuevo,
 		"disparadores.html": rutaDisparadores,
+		"solicitudes.html":  rutaSolicitudes,
 	}
 
 	entradas, err := templatesFS.ReadDir("templates/pages")
