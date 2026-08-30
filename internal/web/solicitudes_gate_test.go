@@ -263,9 +263,17 @@ func TestGate_ElGateYLaPlantillaHablanDeLaMISMAFeature(t *testing.T) {
 // esa acción no. Tiene que responder LO MISMO que el gate, o la consola diría dos cosas distintas
 // sobre «tu plan no lo incluye» sin que nadie lo hubiera decidido.
 //
-// Lo que sí cambia entre los dos es qué se pinta con ese 403, y también es deliberado: el gate sirve
-// la pantalla VACÍA (no hay nada que conservar) y la regeneración REPINTA el detalle con el material
-// extra tecleado dentro. El código de estado y el repintado son decisiones independientes.
+// 🔒 TERCER EMISOR, DECLARADO (T7.6): `solicitudes_sugerencia.go`, cuando falta `llm_intake` al pedir
+// la respuesta redactada. Es EXACTAMENTE el mismo hecho que el segundo —la misma capacidad, la misma
+// puerta que el gate del grupo no cubre— sobre la otra acción que la necesita, así que responde lo
+// mismo por la misma razón. Que sean dos ficheros y no uno es porque son dos acciones con vistas
+// distintas, no dos criterios.
+//
+// Lo que sí cambia entre los tres es qué se pinta con ese 403, y también es deliberado: el gate sirve
+// la pantalla VACÍA (no hay nada que conservar) y las otras dos REPINTAN el detalle —la regeneración
+// con el material extra tecleado dentro; la sugerencia sin nada que conservar, porque es un botón,
+// pero con el botón deshabilitado y su razón delante—. El código de estado y el repintado son
+// decisiones independientes.
 func TestGate_ElUNICO403DeLaConsolaEsElDeLaFeature(t *testing.T) {
 	t.Parallel()
 
@@ -273,6 +281,7 @@ func TestGate_ElUNICO403DeLaConsolaEsElDeLaFeature(t *testing.T) {
 	want := map[string]bool{
 		"solicitudes_gate.go":        true,
 		"solicitudes_comparacion.go": true,
+		"solicitudes_sugerencia.go":  true,
 	}
 	for _, f := range emisores {
 		if !want[f] {

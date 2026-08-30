@@ -122,7 +122,11 @@ func NewRouterWithLimiter(cfg *config.Config) (*gin.Engine, func()) {
 	// cookie de ESTA consola, y con el plazo por petición que acota la cadena hacia identity y la
 	// API pública.
 	router.Use(webgin.CSRF(csrfOptions(cfg)))
-	router.Use(webgin.RequestDeadline(cfg.UpstreamTimeout))
+	// 🔴 EL DEADLINE POR PETICIÓN YA NO ES UNO PARA TODOS (T7.6): sigue siendo UpstreamTimeout en las
+	// ~20 rutas de esta consola y es más largo en UNA, la sugerencia de la respuesta, que es la única
+	// que espera a que un modelo redacte. El porqué —y por qué no vale un middleware propio DESPUÉS
+	// de éste— está entero en solicitudes_plazos.go.
+	router.Use(plazoPorRuta(cfg))
 
 	// El `system` con el que esta consola se presenta ante identity es CAMPO del cliente, no una
 	// constante del módulo: el System Gate autoriza aplicaciones, no ecosistemas. Unas opciones que
@@ -265,12 +269,23 @@ func NewRouterWithLimiter(cfg *config.Config) (*gin.Engine, func()) {
 	// (mismo criterio que /sesiones/enviar). Lo único que esa vecindad se comería es una solicitud que
 	// se llamara literalmente «descartar», y los identificadores son `in-…`.
 	//
-	// 📌 DE LAS SIETE ACCIONES DEL DETALLE HAY CUATRO, y son las que NO le hablan al cliente (T7.4):
-	// mover el estado, guardar las líneas facturables, corregir la interpretación y regenerarla.
-	// Ninguna manda un mensaje por WhatsApp —regenerar reinterpreta un texto ya recibido y el cliente
-	// no se entera—. Siguen SIN registrar las tres que sí le hablan o cuestan una inferencia:
-	// aprobar y pedir-info (T7.5) y sugerir-respuesta (T7.6); sus botones dan el 404 del router hasta
-	// entonces, y está dicho aquí para que no parezca un olvido.
+	// 📌 LAS SIETE ACCIONES DEL DETALLE ESTÁN COMPLETAS. Las cuatro que NO le hablan al cliente
+	// llegaron en T7.4 —mover el estado, guardar las líneas facturables, corregir la interpretación y
+	// regenerarla, y ninguna manda un mensaje por WhatsApp: regenerar reinterpreta un texto ya recibido
+	// y el cliente no se entera—, LAS DOS QUE SÍ LE HABLAN en T7.5 —aprobar y pedir más información— y
+	// la que cuesta una inferencia en T7.6: sugerir la respuesta.
+	//
+	// 🔴 ESAS DOS DE T7.5 MANDAN UN WHATSAPP A UNA PERSONA. No se registran distinto —el gate del grupo
+	// y el CSRF de la casa son los mismos— pero su reparto de desenlaces sí es propio, porque un
+	// repintado sobre un envío ya hecho invita a un F5 que lo enviaría dos veces: está escrito entero
+	// en la cabecera de solicitudes_acciones.go.
+	//
+	// 🔴 Y LA DE T7.6 ES LA ÚNICA RUTA DE ESTA CONSOLA CON PLAZOS PROPIOS, los tres: el cliente HTTP
+	// (apiclient), el deadline por petición (plazoPorRuta, arriba) y el write deadline, que se instala
+	// AQUÍ como middleware de la ruta y no en el grupo —relevar al WriteTimeout del servidor es
+	// exactamente lo que el resto de esta consola no debe hacer—. Es POST aunque no escriba nada, y no
+	// es por el formulario: consume una inferencia, no es cacheable, no es gratis, y un GET lo
+	// dispararía un prefetch del navegador.
 	//
 	// 🔑 Las rutas se componen con las MISMAS constantes de sufijo con las que solicitudes_detalle.go
 	// arma el `action` de cada formulario. Escribirlas aquí como literal daría dos cadenas que nadie
@@ -285,6 +300,10 @@ func NewRouterWithLimiter(cfg *config.Config) (*gin.Engine, func()) {
 	solicitudes.POST(rutaSolicitudDetalle+sufijoLineas, adminH.GuardarLineasSolicitud)
 	solicitudes.POST(rutaSolicitudDetalle+sufijoCorregir, adminH.CorregirInterpretacionSolicitud)
 	solicitudes.POST(rutaSolicitudDetalle+sufijoRegenerar, adminH.RegenerarSolicitud)
+	solicitudes.POST(rutaSolicitudDetalle+sufijoAprobar, adminH.AprobarSolicitud)
+	solicitudes.POST(rutaSolicitudDetalle+sufijoPedirInfo, adminH.PedirInfoSolicitud)
+	solicitudes.POST(rutaSolicitudDetalle+sufijoSugerir,
+		plazoDeEscrituraSugerencia(cfg), adminH.SugerirRespuestaSolicitud)
 
 	var cleanup func()
 	if rateLimiter != nil {

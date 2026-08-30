@@ -175,7 +175,29 @@ func TestFlash_TodosLosCodigosDeLasPantallasTienenTexto(t *testing.T) {
 		flashSolicitudLineasIlegibles, flashSolicitudLineasRechazadas, flashSolicitudNoEditable,
 		flashRegeneracionSinPlan, flashRegeneracionSinAddon, flashRegeneracionSinCredencial,
 		flashRegeneracionSinOriginal, flashRegeneracionEnCurso, flashRegeneracionViaInvalida,
-		flashRegeneracionTextoLargo} {
+		flashRegeneracionTextoLargo,
+		// Los de las DOS acciones que SÍ le hablan al cliente (T7.5). De los siete, DOS no viajan
+		// nunca por la URL —los dos rechazos locales del campo en blanco— y un tercero tampoco:
+		// `solicitud_sin_precio`, que viene de la API y aun así repinta porque el cloud lo decide
+		// antes de la primera escritura, así que ni mutó ni mandó nada.
+		//
+		// 🔴 Son códigos PROPIOS y no los de T7.4 aunque varios describan el mismo rechazo: lo que
+		// esta media docena de textos tiene que decir es «NO se le envió nada al cliente», que es una
+		// frase que las otras cuatro acciones no necesitan. Y `solicitud_envio_incierto` es el que no
+		// puede faltar: sin él, un 5xx caería en el genérico «inténtalo de nuevo en un momento» sobre
+		// un mensaje que quizá ya salió.
+		flashSolicitudSinRespuesta, flashSolicitudSinPregunta, flashSolicitudSinPrecio,
+		flashSolicitudNoAprobable, flashSolicitudMovidaSinEnviar, flashSolicitudRechazadaSinEnviar,
+		flashSolicitudEnvioIncierto,
+		// Los de LA SUGERENCIA (T7.6). DOS de los tres no viajan nunca por la URL —el corte local sin
+		// `llm_intake` y el `lines_without_price`, que viene de la API y aun así repinta porque el
+		// cloud lo decide antes de llamar al modelo—, y `sugerencia_sin_plan` viaja por LOS DOS
+		// caminos: el mismo hecho puede llegar como corte local o como 403 de la plataforma.
+		//
+		// 🔴 Son códigos PROPIOS y no los de aprobar aunque dos describan el mismo rechazo del cloud:
+		// aquellos dicen «NO se le envió nada al cliente» y esta puerta no iba a enviar nada. Un aviso
+		// que hable de un envío que nunca iba a ocurrir deja a la dueña buscando un mensaje que no existe.
+		flashSugerenciaSinPlan, flashSugerenciaSinPrecio, flashSugerenciaSinLineas} {
 		if !flashErrors.Known(code) {
 			t.Errorf("el código de error %q no tiene texto", code)
 		}
@@ -185,7 +207,13 @@ func TestFlash_TodosLosCodigosDeLasPantallasTienenTexto(t *testing.T) {
 		flashInvitationRevoked, flashInvitationAccepted,
 		flashFlowPublished, flashTriggerCreated, flashTriggerDeleted,
 		flashSolicitudEstadoCambiado, flashSolicitudLineasGuardadas, flashSolicitudCorreccionGuardada,
-		flashRegeneracionEncargada} {
+		flashRegeneracionEncargada,
+		flashSolicitudAprobada, flashSolicitudInfoPedida,
+		// El único éxito de la sugerencia (T7.6). Lo pintan DOS caminos —el redirect del PRG y el
+		// repinte de reserva cuando la cotización no cupo en la cookie—, así que además de estar en el
+		// catálogo tiene que ser UNO: dos textos para el mismo hecho se separan en cuanto alguien toca
+		// uno de los dos.
+		flashSugerenciaLista} {
 		if !flashSuccesses.Known(code) {
 			t.Errorf("el código de éxito %q no tiene texto", code)
 		}

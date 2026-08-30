@@ -82,6 +82,9 @@ func paginasRenderizadas(t *testing.T, router http.Handler) map[string]*httptest
 		"GET /api/v1/intakes/{id}": {http.StatusOK, solicitudDeCampo()},
 		"POST /api/v1/intakes/discard": {http.StatusOK, descarteBody(
 			[]string{testIntakeID}, map[string]string{testOtroIntake: "live_event"})},
+		// LA SUGERENCIA (T7.6), para poder capturar la rama de la pantalla que solo existe tras
+		// pedirla: el párrafo del ORIGEN, que es HTML que ningún GET sirve por su cuenta.
+		"POST /api/v1/intakes/{id}/quote-suggestion": {http.StatusOK, sugerenciaDelRespaldo},
 	}
 	api := newStubAPI(t, rutasAdmin)
 	routerAdmin := adminRouter(api)
@@ -119,6 +122,28 @@ func paginasRenderizadas(t *testing.T, router http.Handler) map[string]*httptest
 	// de JavaScript, y nadie lo notaría: todo lo demás seguiría verde.
 	renders["invitaciones_con_token"] = getConCookies(routerAdmin, "/invitaciones",
 		clientSessionCookie(t), cookieDeInvitacion(t, routerAdmin))
+
+	// 🔴 LA PANTALLA CON LA SUGERENCIA RECIÉN PEDIDA (T7.6) es otra rama que ningún GET sirve solo: el
+	// párrafo del ORIGEN únicamente se emite cuando el GET llega con la cookie efímera que puso el
+	// POST. Sin este par POST+GET, el único bloque de esta consola que pinta un texto redactado por un
+	// modelo quedaría fuera de los tests de CSP, de estilo inline y de JavaScript, y nadie lo notaría:
+	// todo lo demás seguiría verde.
+	//
+	// 🔑 VA CON UN ROUTER APARTE y no cambiando el de arriba, por lo mismo que el selector de empresas:
+	// necesita un plan CON `llm_intake`, y el principal no lo tiene A PROPÓSITO. Sin esa capacidad el
+	// detalle pinta TRES bloques de paywall —el de sugerir, el de regenerar y el de las preguntas
+	// preparadas— que también son HTML de esta pantalla; añadírsela al router principal los sacaría del
+	// recorrido sin que nadie lo notara. Con los dos routers se recorren las dos mitades.
+	rutasConIA := make(map[string]stubResponse, len(rutasAdmin))
+	for ruta, resp := range rutasAdmin {
+		rutasConIA[ruta] = resp
+	}
+	rutasConIA["GET /api/v1/entitlements"] = stubResponse{http.StatusOK,
+		entitlementsBody("commerce", "catalog_import", "menu", featureCartBasic, featureLLMIntake)}
+	routerConIA := adminRouter(newStubAPI(t, rutasConIA))
+	renders["solicitud_con_ia"] = getWithSession(t, routerConIA, rutaSolicitudes+"/"+testIntakeID)
+	renders["solicitud_con_sugerencia"] = getConCookies(routerConIA, rutaSolicitudes+"/"+testIntakeID,
+		clientSessionCookie(t), cookieDeSugerenciaRecienPedida(t, routerConIA))
 
 	// 🔴 LOS DOS REPINTADOS DE D-047.16 son HTML que NO se sirve en ningún GET: solo aparecen cuando
 	// la validación local rechaza una publicación o un alta, y llevan dentro justo lo que el usuario

@@ -43,11 +43,13 @@ const defaultTimeout = 15 * time.Second
 // consola son 15s (o los 20s que pone la config), y por ahí esa llamada no cabe: muere sin
 // respuesta.
 //
-// ⚠️ Este plazo arregla UN plazo de los tres, y solo el de este cliente HTTP. Los otros dos son del
-// servidor de la consola —`RequestDeadline(UpstreamTimeout)` (20s) en el router y `WriteTimeout`
-// (30s)— y siguen cortando por debajo: quien monte la PANTALLA de la sugerencia tendrá que darle su
-// propio plazo a esa ruta, como hizo el BFF en el Plan 047 · T2.4. Aquí no se toca nada de eso: esta
-// casilla es el cliente.
+// ⚠️ Este plazo es UNO de los tres, y solo el de este cliente HTTP. Los otros dos son del servidor de
+// la consola —el deadline por petición y el write deadline— y los trajo T7.6, que le dio a esa ruta
+// los suyos: 58s y 60s, en `internal/web/solicitudes_plazos.go`. Los tres tienen que quedar en ORDEN
+// —cliente < petición < escritura— para que, cuando la espera se pase, corte el cliente (que devuelve
+// un error traducible a pantalla) y no el servidor (que cierra la conexión sin nada que pintar), así
+// que ÉSTE es el más corto de los tres y subirlo sin mover los otros dos invierte el diseño. La
+// constante gemela es `config.DefaultQuoteSuggestionTimeout`, y hay un test que compara las dos.
 const DefaultInferenceTimeout = 55 * time.Second
 
 // maxErrorBody acota lo que se lee del cuerpo de un no-2xx. El detalle del upstream NO se pinta al

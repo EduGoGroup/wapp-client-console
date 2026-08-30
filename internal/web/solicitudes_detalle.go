@@ -16,11 +16,11 @@ import (
 // ecosistema: la ficha, la comparación original ↔ interpretado, el borrador, las acciones que le
 // hablan al cliente, el cambio de estado y la corrección de líneas.
 //
-// 📌 ESTA CASILLA ES LA LECTURA. Los formularios se pintan enteros —son parte del HTML de la
-// pantalla— pero sus handlers POST llegan después. Desde T7.4 están registrados los CUATRO que no le
-// hablan al cliente (estado, líneas, corregir y regenerar, cada uno en el fichero de su tema);
-// siguen fuera los tres que sí le hablan o cuestan una inferencia: aprobar y pedir información
-// (T7.5) y sugerir la respuesta (T7.6).
+// 📌 ESTA CASILLA FUE LA LECTURA. Los formularios se pintaban enteros —son parte del HTML de la
+// pantalla— y sus handlers POST llegaron después: los CUATRO que no le hablan al cliente en T7.4
+// (estado, líneas, corregir y regenerar, cada uno en el fichero de su tema), los DOS que sí le hablan
+// en T7.5 (aprobar y pedir información) y la que cuesta una inferencia en T7.6 (sugerir la respuesta,
+// en solicitudes_sugerencia.go). Los siete están.
 //
 // 🔑 EL REPINTADO DE D-047.16 ENTRA POR AQUÍ, y por eso detalleRender creció. Un rechazo de
 // validación LOCAL no redirige: vuelve a esta misma función con lo tecleado dentro y un 400. Lo que
@@ -165,6 +165,14 @@ type detalleRender struct {
 	// code es el flash del rechazo, que se pinta arriba de la pantalla. Pisa al `?error=` de la URL
 	// porque en un repintado no hay URL de la que venir.
 	code string
+	// exito es el flash de ÉXITO de un repintado, y solo lo llena UN caso en toda la consola: la
+	// sugerencia que salió bien y NO CUPO en la cookie del PRG (T7.6). Pisa al `?success=` de la URL
+	// por lo mismo que `code` pisa al `?error=`.
+	//
+	// 🔴 Un 200 con aviso de éxito sobre el POST parece contradecir el PRG y no lo hace: no hubo
+	// mutación por ningún lado, y lo que se está eligiendo es NO PERDER EL TEXTO por delante de
+	// ahorrar la tecla. Ver ponSugerenciaFlash.
+	exito string
 	// filas y defectos son lo tecleado en el formulario de LÍNEAS FACTURABLES y lo que se le objeta.
 	filas    []filaLinea
 	defectos []defectoLinea
@@ -176,6 +184,25 @@ type detalleRender struct {
 	// match—. Volcar lo tecleado en uno dentro del otro pondría los precios en filas ajenas.
 	filasBorrador    []filaLinea
 	defectosBorrador []defectoLinea
+	// textoRespuesta y textoPregunta son lo tecleado en los DOS formularios que le hablan al cliente
+	// (T7.5), para devolverlo a su textarea.
+	//
+	// 🔴 SON DOS CAMPOS Y NO UNO por la misma razón que las líneas llevan dos pares: son dos
+	// formularios distintos en la misma tarjeta, y el navegador manda solo el que se envía. En un
+	// repintado uno de los dos llega SIEMPRE vacío, y volcar el que llegó en el otro pondría la
+	// cotización dentro del campo de la pregunta —o al revés—, sin que nada fallara.
+	textoRespuesta string
+	textoPregunta  string
+	// sinPrecio son las líneas que la plataforma objetó al rechazar una aprobación
+	// (`lines_without_price`). Es el ÚNICO desenlace de la API de esas dos puertas que repinta; el
+	// porqué está en la cabecera de solicitudes_acciones.go.
+	sinPrecio []lineaSinPrecio
+	// sugerencia es la cotización recién redactada (T7.6). Llega por DOS caminos —la cookie efímera
+	// que consume el GET tras el 303, y el repinte de reserva cuando no cupo en ella— y los dos la
+	// dejan en el campo de aprobar con su línea de origen. Nil ⇒ esta página no viene de una
+	// sugerencia, y entonces el origen NO se pinta: decir «lo redactó el modelo» sobre la propuesta de
+	// siempre sería mentir.
+	sugerencia *apiclient.IntakeQuoteSuggestion
 	// textoRegenerar es el material extra tecleado, para devolverlo al textarea.
 	textoRegenerar string
 	// runasRegenerar es cuántas runas trae ese material cuando se pasó del tope (0 ⇒ no se pasó). Es
@@ -185,10 +212,20 @@ type detalleRender struct {
 }
 
 // ShowSolicitudDetalle pinta una solicitud con sus líneas, su interpretación y sus acciones (T7.3).
+//
+// 🔑 AQUÍ —y no dentro de renderSolicitudDetalle— SE CONSUME LA COOKIE DE LA SUGERENCIA (T7.6), y el
+// sitio es parte del mecanismo: `renderSolicitudDetalle` lo llaman también los repintados de los POST,
+// y leer la cookie ahí la borraría en el primer rechazo de validación que ocurriera antes de que la
+// dueña llegara a ver el texto. El PRG termina en ESTE GET y en ningún otro.
+//
+// Se consume ANTES de llamar al render y con el identificador de la URL: `TakeOneTimeCookie` lee y
+// borra en el mismo gesto, así que no hay ninguna rama de salida que pueda dejarla puesta.
 func (h *AdminHandler) ShowSolicitudDetalle(c *gin.Context) {
+	id := strings.TrimSpace(c.Param("id"))
 	h.renderSolicitudDetalle(c, detalleRender{
-		id:       strings.TrimSpace(c.Param("id")),
-		revision: revisionDeLaQuery(c),
+		id:         id,
+		revision:   revisionDeLaQuery(c),
+		sugerencia: tomaSugerenciaFlash(c, h.cfg, id),
 	})
 }
 
@@ -258,11 +295,17 @@ func (h *AdminHandler) renderSolicitudDetalle(c *gin.Context, r detalleRender) {
 	vista.Lineas.conLoTecleado(r.filas, r.defectos)
 	vista.Borrador = borradorDe(detalle)
 	vista.Borrador.conLoTecleado(r.filasBorrador, r.defectosBorrador)
-	// La espera que se anuncia es la que esta consola cumple HOY: el plazo del grupo
-	// (RequestDeadline(cfg.UpstreamTimeout), server.go), porque la ruta de la sugerencia todavía no
-	// tiene uno propio. Cuando T7.6 traiga el plazo por ruta —el BFF le da 58 s a esa sola—, éste es
-	// el ÚNICO sitio que cambia, y el texto de la pantalla cambia con él sin tocar la plantilla.
-	vista.Acciones = accionesDe(detalle, vista.Borrador, ent, h.cfg.UpstreamTimeout)
+	// La espera que se anuncia es la que la ruta de la sugerencia cumple DE VERDAD: su plazo propio si
+	// lo tiene y el del grupo si no (T7.6). Sale de la config y no de un número escrito en la
+	// plantilla, que es toda la razón de que exista `QuoteSuggestionEffectiveWait`: mover el plazo
+	// mueve el texto, sin tocar el HTML.
+	vista.Acciones = accionesDe(detalle, vista.Borrador, ent, h.cfg.QuoteSuggestionEffectiveWait())
+	// La cotización recién pedida va PRIMERO y lo tecleado DESPUÉS, para que lo que escribió la dueña
+	// gane siempre — ver conLaSugerencia.
+	vista.Acciones.conLaSugerencia(r.sugerencia)
+	// Lo tecleado gana también aquí, y con el mismo matiz que en las líneas: solo en el formulario del
+	// que vino. Un campo en blanco NO pisa la propuesta — ver conLoTecleado.
+	vista.Acciones.conLoTecleado(r.textoRespuesta, r.textoPregunta, r.sinPrecio)
 	vista.Comparacion = comparacionDe(detalle, ent, r.revision)
 	vista.conLoTecleadoEnRegenerar(r.textoRegenerar, r.runasRegenerar)
 	vista.HorasSinResponder = horasSinResponder
@@ -274,6 +317,11 @@ func (h *AdminHandler) renderSolicitudDetalle(c *gin.Context, r detalleRender) {
 		// Pisa al `?error=` que pageData saca de la URL: en un repintado no se viene de ninguna URL,
 		// y el aviso del rechazo es el único que hay.
 		data["Error"] = flashError(r.code)
+	}
+	if r.exito != "" {
+		// Y lo mismo con el `?success=`. Solo lo usa la sugerencia que no cupo en la cookie: el único
+		// repintado de esta consola cuyo desenlace es bueno.
+		data["Success"] = flashSuccess(r.exito)
 	}
 	renderer.HTML(c, statusODoscientos(r.status), plantillaSolicitud, data)
 }

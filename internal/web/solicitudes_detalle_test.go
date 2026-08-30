@@ -682,10 +682,13 @@ func TestSolicitudDetalle_SinInterpretacionSeDiceYNoSeFingeUnBorradorVacio(t *te
 // registro que se escriben por separado se desalinean, y el desenlace es un 404 que ningún gate ve
 // venir.
 //
-// 🔑 EL GEMELO NEGATIVO ES LA SEGUNDA MITAD, y por eso el test se mueve en vez de ampliarse: afirma
-// también qué rutas NO existen todavía. T7.4 registró las CUATRO que no le hablan al cliente y este
-// test cayó —que es exactamente el aviso que se quería—, así que esos cuatro sufijos pasan a la
-// lista de las que SÍ están. Quedan tres, y siguen vigiladas: la lista de abajo se vacía en T7.6.
+// 🔑 EL GEMELO NEGATIVO FUE LA SEGUNDA MITAD, y por eso el test se movía en vez de ampliarse: afirmaba
+// también qué rutas NO existían todavía. T7.4 registró las CUATRO que no le hablan al cliente y este
+// test cayó —que es exactamente el aviso que se quería—; T7.5 registró LAS DOS QUE SÍ LE HABLAN y
+// volvió a caer por lo mismo; T7.6 registró la última, la que cuesta una inferencia, y lo tiró por
+// tercera y última vez. Ya no queda ninguna: la lista negativa se vació y lo que sobrevive es la
+// mitad positiva, que sigue siendo la que importa —un formulario apuntando a una ruta que el router
+// escribe distinto es un 404 que ningún gate ve venir—.
 func TestSolicitudDetalle_LosSieteFormulariosApuntanAlaRutaQueRegistraranLasCasillasSiguientes(t *testing.T) {
 	t.Parallel()
 	router, _ := detalleRouter(t, nil)
@@ -708,18 +711,15 @@ func TestSolicitudDetalle_LosSieteFormulariosApuntanAlaRutaQueRegistraranLasCasi
 			registradas[ruta.Path] = true
 		}
 	}
-	// Las CUATRO que no le hablan al cliente (T7.4) SÍ están: un formulario que apunte a una ruta sin
-	// registrar da un 404 del router, y el aserto de arriba no lo distingue de una que funciona.
-	for _, sufijo := range []string{sufijoEstado, sufijoLineas, sufijoCorregir, sufijoRegenerar} {
+	// LAS SIETE tienen handler: las cuatro que no le hablan al cliente (T7.4), las dos que sí (T7.5) y
+	// la que cuesta una inferencia (T7.6). Un formulario que apunte a una ruta sin registrar da un 404
+	// del router, y el aserto de arriba no lo distingue de una que funciona.
+	for _, sufijo := range []string{
+		sufijoEstado, sufijoLineas, sufijoCorregir, sufijoRegenerar, sufijoAprobar, sufijoPedirInfo,
+		sufijoSugerir,
+	} {
 		if !registradas[rutaSolicitudes+rutaSolicitudDetalle+sufijo] {
 			t.Errorf("la ruta POST %q no está registrada: su formulario apunta a un 404", sufijo)
-		}
-	}
-	// Las TRES que sí le hablan al cliente, o cuestan una inferencia, todavía no.
-	for _, sufijo := range []string{sufijoAprobar, sufijoPedirInfo, sufijoSugerir} {
-		if registradas[rutaSolicitudes+rutaSolicitudDetalle+sufijo] {
-			t.Errorf("la ruta POST %q ya está registrada: mueve este sufijo a la lista de las que "+
-				"SÍ existen, o este test dejará de decir la verdad", sufijo)
 		}
 	}
 }

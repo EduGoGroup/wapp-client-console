@@ -25,6 +25,10 @@ const (
 	// del POST al GET que lo enseña. Vive segundos y solo en la pantalla de invitaciones; el nombre es
 	// propio de esta consola por lo mismo que los otros dos.
 	invitacionCookieName = "wapp_client_invitacion"
+	// sugerenciaCookieName es la cookie EFÍMERA que lleva la cotización recién redactada del POST que
+	// la pide al GET que la pinta (Plan 047 · T7.6). Vive segundos, solo en la pantalla de ESA
+	// solicitud, y la borra el propio GET que la consume.
+	sugerenciaCookieName = "wapp_client_sugerencia"
 )
 
 // consoleWorkday es la jornada de trabajo de la consola y la vida de sus DOS cookies. Ninguna se
@@ -90,6 +94,40 @@ func invitacionCookieOptions(cfg *config.Config) sharedweb.OneTimeCookieOptions 
 		Name:     invitacionCookieName,
 		Path:     rutaInvitaciones,
 		MaxAge:   invitacionCookieMaxAge,
+		Secure:   cfg.CookieSecure,
+		SameSite: cfg.CookieSameSite,
+	}
+}
+
+// sugerenciaCookieMaxAge es el TOPE de vida de la cookie de la cotización, NO el mecanismo que la
+// retira: quien la borra de verdad es el GET que la consume (webgin.TakeOneTimeCookie). Es lo que
+// tarda el navegador en seguir el 303 que la puso, con holgura para una red lenta.
+const sugerenciaCookieMaxAge = 60 * time.Second
+
+// sugerenciaCookieOptions es la política de la cookie efímera de la cotización, acotada a la pantalla
+// de UNA solicitud.
+//
+// 🔴 EL PATH LLEVA EL IDENTIFICADOR A PROPÓSITO, y es la PRIMERA DE DOS CERRADURAS. Con la cookie
+// acotada a `/solicitudes/{id}`, el navegador NO la manda a la solicitud de al lado: sin eso, pedir la
+// sugerencia de A y abrir B en otra pestaña dentro del minuto siguiente pintaría el texto de A —con
+// los precios de A— en la pantalla de B, y ese texto se le manda a un cliente. La SEGUNDA cerradura
+// es el identificador que viaja DENTRO del sobre y que el lector compara (ver tomaSugerenciaFlash):
+// el Path lo pone el navegador y el identificador lo comprueba el servidor, y hacen falta las dos
+// porque una sola se cae con que alguien reescriba la ruta.
+//
+// 🔑 El Path sale de `solicitudURL`, que es LA MISMA función que compone el destino del 303: el
+// navegador identifica una cookie por la terna (dominio, ruta, nombre), así que si el Path y el
+// destino del redirect se escribieran por separado bastaría tocar uno para que la cookie dejara de
+// llegar —o de borrarse— sin que nada fallara al compilar. Un Path vacío, además, NO se rellena a "/"
+// (es deliberado en el módulo), así que equivocarse aquí no ensancha: rompe.
+//
+// El valor no se cifra ni se firma, por lo razonado en el doc de web.OneTimeCookieOptions: lo que
+// viaja es exactamente lo que se le va a pintar en la cara a quien lo pidió, dos milisegundos después.
+func sugerenciaCookieOptions(cfg *config.Config, solicitudID string) sharedweb.OneTimeCookieOptions {
+	return sharedweb.OneTimeCookieOptions{
+		Name:     sugerenciaCookieName,
+		Path:     solicitudURL(solicitudID),
+		MaxAge:   sugerenciaCookieMaxAge,
 		Secure:   cfg.CookieSecure,
 		SameSite: cfg.CookieSameSite,
 	}

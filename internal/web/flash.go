@@ -296,6 +296,90 @@ const (
 	// por lo mismo que los avisos con números del descarte.
 	flashRegeneracionTextoLargo = "regeneracion_texto_largo"
 
+	// --- Desenlaces de las DOS acciones QUE SÍ LE HABLAN AL CLIENTE (T7.5) ---
+	//
+	// 🔴 SON CÓDIGOS PROPIOS Y NO REUTILIZAN LOS DE T7.4 AUNQUE VARIOS DESCRIBAN EL MISMO RECHAZO, y
+	// la razón es la única cosa que separa a estas dos puertas de las otras cuatro: aquí sale un
+	// WhatsApp hacia una persona. Lo que quien lee el aviso necesita saber no es «no se guardó nada»
+	// sino «NO SE LE ENVIÓ NADA AL CLIENTE», y son dos frases distintas aunque en la plataforma sean
+	// el mismo hecho —el envío va después de la escritura, así que sin escritura no hay mensaje—.
+	// Quien las mezcle deja a la dueña deduciendo, sobre un mensaje que no puede desenviar.
+	//
+	// 🔑 De dónde sale que se pueda AFIRMAR «no se envió nada» en cada uno: del ORDEN de operaciones
+	// del cloud, que está escrito y verificado —`cloud/wapp-cloud-platform/internal/intakes/
+	// approve.go:373` valida TODO (texto, estado, líneas sin precio, líneas que cotizar) antes de la
+	// primera escritura, y el envío es el paso (4), después de la transición y de la revisión—. No es
+	// una analogía con `invalid_items`: es el dato del otro lado.
+
+	// flashSolicitudSinRespuesta es el rechazo LOCAL de una aprobación sin texto. No es una
+	// formalidad: es la frase que dice por qué esta consola no rellena ese hueco sola.
+	flashSolicitudSinRespuesta = "solicitud_sin_respuesta"
+	// flashSolicitudSinPregunta es el rechazo LOCAL de una petición de información sin pregunta. Las
+	// que prepara el sistema son una propuesta del formulario y jamás salen solas (INV-1).
+	flashSolicitudSinPregunta = "solicitud_sin_pregunta"
+	// flashSolicitudSinPrecio traduce el 400 `lines_without_price` de la aprobación.
+	//
+	// 🔑 Es el SEGUNDO desenlace de la API de esta consola que no viaja por la URL —repinta, como el
+	// `invalid_items` de las líneas—, y el motivo es el mismo elevado a esta puerta: la comprobación
+	// corre ANTES de la primera escritura, así que no mutó nada Y no mandó nada. Este texto es solo el
+	// ENCABEZADO; QUÉ líneas son lo pinta la pantalla debajo del campo, con su posición y su etiqueta,
+	// porque una lista con números no cabe en una tabla código→texto.
+	flashSolicitudSinPrecio = "solicitud_sin_precio"
+	// flashSolicitudNoAprobable traduce el 422 `not_approvable`: la solicitud no está en un estado
+	// que admita la aprobación. NO es el mismo hecho que `flashSolicitudNoEditable` —aquél es sobre
+	// tocar las líneas— y el camino que se ofrece es el mismo: moverla con el desplegable.
+	flashSolicitudNoAprobable = "solicitud_no_aprobable"
+	// flashSolicitudMovidaSinEnviar traduce los DOS desenlaces de carrera de estas puertas: el 409
+	// `intake_changed` y el 422 `invalid_transition`. Van juntos porque significan lo mismo aquí
+	// —alguien la movió entre que esta pantalla la leyó y la acción llegó al compare-and-swap—, y el
+	// compare-and-swap es justo lo que garantiza que la perdedora no escribió ni mandó nada.
+	flashSolicitudMovidaSinEnviar = "solicitud_movida_sin_enviar"
+	// flashSolicitudRechazadaSinEnviar es el 400/422 SIN clave conocida. Hoy solo lo produce un caso
+	// —la solicitud no tiene ninguna línea que cotizar— y aun así NO se traduce con esas palabras: la
+	// clave no viaja, y ponerle nombre a un rechazo que no se sabe cuál es sería adivinar. Lo que sí
+	// se afirma es lo que el orden del cloud garantiza para cualquier 400 de estas puertas: que no
+	// salió nada hacia el cliente.
+	flashSolicitudRechazadaSinEnviar = "solicitud_rechazada_sin_enviar"
+	// flashSolicitudEnvioIncierto es el desenlace más incómodo de esta casilla, y su texto es
+	// incómodo a propósito — mismo criterio que flashDescarteIncierto y por una razón más fuerte.
+	//
+	// 🔴 NO PUEDE CAER EN EL GENÉRICO, que dice «Inténtalo de nuevo en un momento». Un 5xx o una
+	// conexión rota dejan a esta consola SIN SABER por dónde se cortó: pudo ser antes de escribir, o
+	// después de escribir y mandar el mensaje. Invitar a reintentar a ciegas es invitar a que al
+	// cliente le llegue la misma cotización DOS VECES, y eso no se deshace.
+	flashSolicitudEnvioIncierto = "solicitud_envio_incierto"
+
+	// --- Desenlaces de LA SUGERENCIA DE LA RESPUESTA (T7.6) ---
+	//
+	// 🔴 SON CÓDIGOS PROPIOS Y NO LOS DE APROBAR, aunque dos de ellos nazcan del MISMO cuerpo del
+	// cloud: los de aprobar dicen «NO se le envió nada al cliente», y aquí no había nada que enviar.
+	// Esta puerta no le habla a nadie: redacta una propuesta y la deja en el campo. Un aviso que hable
+	// de un envío que nunca iba a ocurrir deja a la dueña buscando un mensaje que no existe.
+
+	// flashSugerenciaSinPlan es la capacidad `llm_intake` ausente, y lo emiten DOS caminos con el
+	// mismo significado: el corte local de este handler (defensa en profundidad, antes de gastar el
+	// viaje) y el 403 `feature_not_enabled` de la plataforma. Comparten código porque son el mismo
+	// hecho — la misma razón por la que `regeneracion_sin_plan` viaja por los dos.
+	flashSugerenciaSinPlan = "sugerencia_sin_plan"
+	// flashSugerenciaSinPrecio traduce el 400 `lines_without_price`, que es el desenlace MÁS PROBABLE
+	// en campo: un borrador recién interpretado no tiene precios.
+	//
+	// 🔑 Es el TERCER desenlace de la API de esta consola que no viaja por la URL —repinta—, y el
+	// motivo es el de siempre: el cloud lo decide antes de llamar al modelo, así que no mutó nada, y
+	// trae la lista con la que se corrige. QUÉ líneas son lo pinta la pantalla debajo del campo, que
+	// es donde caben con su posición y su etiqueta.
+	flashSugerenciaSinPrecio = "sugerencia_sin_precio"
+	// flashSugerenciaSinLineas es el OTRO 400 de esta puerta: la solicitud no tiene líneas que
+	// cotizar.
+	//
+	// 🔴 SE NOMBRA AUNQUE LA CLAVE NO VIAJE, y hay que dejar escrito el riesgo: esta puerta tiene
+	// EXACTAMENTE DOS cuerpos de 400 —el de líneas sin precio, que sí trae clave, y éste— y el segundo
+	// llega como un ErrInvalidInput pelado, así que el texto lo AFIRMA a partir del contrato del
+	// cloud, no de lo que llegó. El día que la plataforma añada un tercer 400 con motivo, este aviso
+	// dirá algo falso; la contramedida es el test que enumera los dos, que empezará a describir mal el
+	// caso nuevo en cuanto alguien lo mire.
+	flashSugerenciaSinLineas = "sugerencia_sin_lineas"
+
 	// --- Desenlaces del SELECTOR DE EMPRESAS (T5.3) ---
 
 	// flashTenantNotYours traduce el 404 de POST /api/v1/auth/active-tenant.
@@ -331,6 +415,26 @@ const (
 	flashSolicitudLineasGuardadas    = "solicitud_lineas_guardadas"
 	flashSolicitudCorreccionGuardada = "solicitud_correccion_guardada"
 	flashRegeneracionEncargada       = "regeneracion_encargada"
+
+	// Los DOS éxitos de las acciones que SÍ le hablan al cliente (T7.5).
+	//
+	// 🔴 Ninguno de los dos puede decir «enviado» a secas, y ésta es la parte del texto que hay que
+	// defender: el 200 de la plataforma significa «se aplicó y quedó registrado», NUNCA «el cliente lo
+	// recibió». El envío es el paso (4) del cloud y NO devuelve error a propósito —una aprobación ya
+	// escrita no se deshace porque el teléfono esté apagado—, así que con la sesión de WhatsApp caída
+	// esta pantalla ve el mismo 200. Prometer la entrega sería prometer algo que esta puerta no sabe.
+	flashSolicitudAprobada   = "solicitud_aprobada"
+	flashSolicitudInfoPedida = "solicitud_info_pedida"
+
+	// El ÚNICO éxito de la sugerencia (T7.6). Lo pintan DOS caminos —el redirect del PRG y el repinte
+	// de reserva cuando la cotización no cupo en la cookie—, y por eso es UN código y no dos: son el
+	// mismo hecho contado a la misma persona, y dos textos se separarían en cuanto alguien tocara uno.
+	//
+	// 🔴 Lo que este texto NO puede callar es que NO SE HA ENVIADO NADA. Es la única acción de la
+	// tarjeta «Responderle al cliente» que no le habla al cliente, está pegada a las dos que sí, y su
+	// resultado aparece dentro del campo de aprobar: sin esa frase, leer «propuesta lista» junto a un
+	// texto ya escrito en el hueco del envío se parece demasiado a haberlo mandado.
+	flashSugerenciaLista = "sugerencia_lista"
 
 	flashMemberAdded   = "member_added"
 	flashMemberRemoved = "member_removed"
@@ -476,6 +580,35 @@ var (
 			"no propone ninguna: la fija la configuración de tu empresa, en los ajustes de LLM.",
 		flashRegeneracionTextoLargo: "No se pidió nada: el material extra no cabe. Debajo del campo " +
 			"está el tope y cuánto llevas escrito; recórtalo y vuelve a intentarlo.",
+
+		flashSolicitudSinRespuesta: "Escribe la respuesta que quieres enviarle al cliente. NO se ha " +
+			"enviado nada: esta consola no manda una cotización que no hayas leído.",
+		flashSolicitudSinPregunta: "Escribe la pregunta que quieres hacerle al cliente. NO se ha " +
+			"enviado nada: las que propone el sistema no se envían solas.",
+		flashSolicitudSinPrecio: "NO se le envió nada al cliente: quedan líneas sin precio y la " +
+			"cotización no puede salir. Están listadas debajo del texto; ponles precio en el borrador " +
+			"de arriba, guarda la corrección y vuelve a aprobar.",
+		flashSolicitudNoAprobable: "Esta solicitud no está en un estado que admita la aprobación, así " +
+			"que NO se le envió nada al cliente. Abajo tienes en cuál está; muévela con el desplegable " +
+			"de estado si todavía hace falta responderle.",
+		flashSolicitudMovidaSinEnviar: "Otra persona movió esta solicitud mientras la mirabas, así que " +
+			"NO se le envió nada al cliente. Abajo tienes el estado actual: revísalo y vuelve a " +
+			"intentarlo si sigue haciendo falta.",
+		flashSolicitudRechazadaSinEnviar: "La plataforma rechazó la petición y NO se le envió nada al " +
+			"cliente. Revisa el texto y las líneas de la solicitud antes de volver a intentarlo.",
+		flashSolicitudEnvioIncierto: "No se pudo saber si llegó a enviarse. MIRA ESTA SOLICITUD ANTES " +
+			"DE REPETIRLO: si aparece respondida, el mensaje ya salió, y volver a mandarlo se lo " +
+			"dejaría al cliente DOS VECES.",
+
+		flashSugerenciaSinPlan: "No se pidió nada. El plan de tu empresa no incluye el análisis con " +
+			"IA, así que la plataforma no puede redactar la respuesta. La solicitud se responde igual: " +
+			"el campo de abajo trae la propuesta que arma esta consola con las líneas, y se edita a mano.",
+		flashSugerenciaSinPrecio: "No hay nada que sugerir todavía: quedan líneas sin precio. Están " +
+			"listadas debajo del texto; ponles precio en el borrador de arriba, guarda la corrección y " +
+			"vuelve a pedir la propuesta. No se ha enviado nada.",
+		flashSugerenciaSinLineas: "No hay nada que sugerir: esta solicitud no tiene líneas que cotizar. " +
+			"Guarda primero las líneas del borrador de arriba y vuelve a pedir la propuesta. No se ha " +
+			"enviado nada.",
 	})
 
 	flashSuccesses = sharedweb.NewFlashCatalog("Acción completada.", map[string]string{
@@ -510,6 +643,16 @@ var (
 		flashRegeneracionEncargada: "Regeneración encargada. TODAVÍA NO ESTÁ LISTA: la plataforma la " +
 			"procesa por detrás y lo que ves debajo sigue siendo la interpretación anterior. Vuelve a " +
 			"abrir esta solicitud en un momento para verla.",
+
+		flashSolicitudAprobada: "Aprobada: la plataforma registró tu respuesta y la mandó por la " +
+			"sesión de esta solicitud. Que quede registrada NO garantiza que el cliente ya la tenga " +
+			"delante — eso depende de que la sesión de WhatsApp esté en pie.",
+		flashSolicitudInfoPedida: "Pregunta registrada y mandada por la sesión de esta solicitud. Que " +
+			"quede registrada NO garantiza que el cliente ya la tenga delante; cuando conteste, su " +
+			"respuesta vuelve a esta misma solicitud.",
+
+		flashSugerenciaLista: "Propuesta lista en el campo de abajo. NO SE HA ENVIADO NADA y la " +
+			"solicitud sigue donde estaba: léela, cámbiala si hace falta y aprueba tú.",
 	})
 )
 
@@ -800,4 +943,134 @@ func flashCodeForRegeneracion(err error) string {
 		return flashRegeneracionTextoLargo
 	}
 	return flashCodeFor(err)
+}
+
+// flashCodeForSugerencia es el traductor de LA SUGERENCIA DE LA RESPUESTA (T7.6).
+//
+// 🔴 ES OTRO TRADUCTOR Y NO UNA RAMA DE flashCodeForAprobar aunque comparta con él DOS desenlaces
+// —el 403 de capacidad y el 400 `lines_without_price`, que son el mismo muro sobre el mismo objeto—.
+// Lo que cambia no son los códigos: es que aquella puerta manda un WhatsApp y ésta no manda nada, así
+// que sus textos contestan «¿se le envió algo al cliente?» y aquí esa pregunta no existe. Delegar
+// dejaría avisos hablando de un envío que nunca iba a ocurrir.
+//
+// 🔴 EL ORDEN DE LAS RAMAS ES CONTRATO, y aquí son DOS los pares que dependen de él:
+//   - `*FeatureNotEnabledError` desenvuelve a ErrForbidden: preguntar antes por el genérico mandaría
+//     a pedir permisos en vez de a la contratación.
+//   - `*LinesWithoutPriceError` desenvuelve a ErrInvalidInput (el 400 cae ahí, statusError):
+//     preguntar antes por el genérico se comería el único rechazo que dice qué hacer, y además
+//     dejaría el repintado sin disparar, porque el handler lo reconoce por el mismo tipo.
+//
+// 🔑 EL 403 SE ABRE EN DOS Y NO ES UN LUJO: esta ruta lleva DOS gates encadenados —`cart_basic` en el
+// grupo y `llm_intake` en el handler—, y la plataforma puede rechazar por cualquiera de los dos. Sin
+// la capacidad de la bandeja lo que se pierde es la pantalla entera, y decirlo con las palabras de la
+// IA mandaría a contratar lo que no falta.
+//
+// 🔑 Y EL ErrInvalidInput SE NOMBRA en vez de caer en «revisa lo que escribiste»: aquí no hay nada
+// escrito que revisar —esta puerta es un botón— y el único 400 sin clave que el cloud emite es «no
+// hay líneas que cotizar». Ver flashSugerenciaSinLineas, que deja escrito el riesgo de afirmarlo.
+func flashCodeForSugerencia(err error) string {
+	if err == nil {
+		return ""
+	}
+	if missing, ok := apiclient.FeatureNotEnabledOf(err); ok {
+		if missing.Feature == featureCartBasic {
+			return flashSolicitudesSinPlan
+		}
+		return flashSugerenciaSinPlan
+	}
+	if _, ok := apiclient.LinesWithoutPriceOf(err); ok {
+		return flashSugerenciaSinPrecio
+	}
+	if errors.Is(err, apiclient.ErrInvalidInput) {
+		return flashSugerenciaSinLineas
+	}
+	return flashCodeFor(err)
+}
+
+// flashCodeForAprobar es el traductor de la APROBACIÓN (T7.5), la puerta que le responde al cliente
+// con la cotización.
+//
+// 🔴 ES OTRO TRADUCTOR Y NO UNA RAMA MÁS DE flashCodeForEstado O flashCodeForLineas, aunque los tres
+// vivan en la misma pantalla y compartan tres de sus rechazos. Lo que cambia no son los códigos HTTP:
+// es lo que hay que decir. Aquí sale un mensaje hacia una persona, así que cada desenlace tiene que
+// contestar «¿se le envió algo al cliente?», y esa pregunta no existe en las otras cuatro acciones.
+// Los planos comparten pantalla, no traductor — la frase ya estaba escrita en flashCodeForEstado.
+//
+// 🔴 EL ORDEN DE LAS RAMAS ES CONTRATO, y aquí son CUATRO los pares que dependen de él, más que en
+// ninguna otra puerta de esta consola:
+//   - `*FeatureNotEnabledError` desenvuelve a ErrForbidden: preguntar antes por el genérico mandaría
+//     a pedir permisos en vez de a la contratación.
+//   - `*LinesWithoutPriceError`, `*NotApprovableError` e `*InvalidTransitionError` desenvuelven LOS
+//     TRES a ErrInvalidInput (el 400 y el 422 caen ahí, statusError): preguntar antes por el genérico
+//     se comería los tres únicos rechazos que dicen qué hacer, y además dejaría el repintado del
+//     `lines_without_price` sin disparar, porque el handler lo reconoce por el mismo tipo.
+//   - `ErrIntakeChanged` desenvuelve a ErrConflict, que en esta consola significa «ya existe algo con
+//     ese nombre».
+//
+// 🔑 EL GENÉRICO NO ES flashCodeFor. Lo que quede fuera de las ramas nombradas —un 5xx, una conexión
+// cortada, un cuerpo que esta consola no conoce— sale por flashSolicitudEnvioIncierto y NO por
+// «inténtalo de nuevo en un momento»: es el caso en el que no se sabe si el WhatsApp salió, y el
+// consejo del genérico produciría un segundo mensaje al cliente. Mismo criterio que
+// flashCodeForDescarte, sobre algo que se deshace todavía menos.
+func flashCodeForAprobar(err error) string {
+	if err == nil {
+		return ""
+	}
+	if featureAusente(err) {
+		return flashSolicitudesSinPlan
+	}
+	if _, ok := apiclient.LinesWithoutPriceOf(err); ok {
+		return flashSolicitudSinPrecio
+	}
+	if _, ok := apiclient.NotApprovableOf(err); ok {
+		return flashSolicitudNoAprobable
+	}
+	return flashCodeParaLoQueLeHablaAlCliente(err)
+}
+
+// flashCodeForPedirInfo es el traductor de PEDIR MÁS INFORMACIÓN (T7.5).
+//
+// Es OTRO que el de la aprobación y no una llamada a él, y la diferencia es real y está en el
+// contrato del cloud: esta puerta NO emite `lines_without_price` —no cotiza nada, así que los precios
+// no son precondición suya— ni `not_approvable` —no estrecha la máquina de estados, y su único 422 es
+// el del ciclo de vida (`writeRequestInfoError`, publicapi/intakes.go)—. Delegar en el de aprobar
+// dejaría dos ramas vivas que esta puerta no puede producir, y con ellas la idea de que sí.
+func flashCodeForPedirInfo(err error) string {
+	if err == nil {
+		return ""
+	}
+	if featureAusente(err) {
+		return flashSolicitudesSinPlan
+	}
+	return flashCodeParaLoQueLeHablaAlCliente(err)
+}
+
+// flashCodeParaLoQueLeHablaAlCliente traduce lo que las DOS puertas que mandan un WhatsApp comparten:
+// la carrera, el rechazo sin clave y —sobre todo— el desenlace que no se sabe.
+//
+// Va aparte porque es justo la mitad en la que las dos coinciden y en la que equivocarse cuesta un
+// mensaje repetido a una persona; tenerla dos veces garantizaría que el siguiente arreglo entrara
+// solo en una de las copias.
+//
+// 🔴 LO QUE ESTA FUNCIÓN AFIRMA, y de dónde sale: que un 400/422 de estas dos puertas NO envió nada.
+// No es una analogía —es el orden del cloud, donde las validaciones van todas antes de la primera
+// escritura y el envío es el último paso (intakes/approve.go y intakes/requestinfo.go)—. El 401 se
+// deja pasar tal cual porque su desenlace no es un aviso sino una expulsión: lo mira sessionIsDead
+// antes de llegar aquí.
+func flashCodeParaLoQueLeHablaAlCliente(err error) string {
+	if _, ok := apiclient.InvalidTransitionOf(err); ok {
+		return flashSolicitudMovidaSinEnviar
+	}
+	if errors.Is(err, apiclient.ErrIntakeChanged) {
+		return flashSolicitudMovidaSinEnviar
+	}
+	if errors.Is(err, apiclient.ErrInvalidInput) {
+		return flashSolicitudRechazadaSinEnviar
+	}
+	// El resto sale por el traductor de la casa SALVO su genérico: un desenlace que esta consola no
+	// sabe leer es exactamente el caso en el que no puede afirmar que no se envió nada.
+	if code := flashCodeFor(err); code != flashUpstreamUnavailable {
+		return code
+	}
+	return flashSolicitudEnvioIncierto
 }

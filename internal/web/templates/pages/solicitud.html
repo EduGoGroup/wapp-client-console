@@ -353,6 +353,21 @@ de `.URLs`, que se compone en Go con las mismas constantes con las que se regist
             <input type="hidden" name="csrf_token" value="{{ $.CSRFToken }}">
             <div class="wapp-field">
                 <label class="wapp-field__label" for="rendered_text">Respuesta que se le enviará al cliente</label>
+                {{/* EL ORIGEN DEL TEXTO (T7.6), junto al campo y no en el aviso de arriba: lo que hay
+                     que poder leer de un vistazo es si esto lo escribió el modelo o el respaldo sobrio,
+                     y por qué.
+
+                     🔴 ES LA ÚNICA SEÑAL QUE EXISTE. Esta puerta NUNCA da 502: con el modelo caído la
+                     plataforma contesta 200 con el texto determinista y su motivo, así que sin este
+                     párrafo «la voz de la dueña funciona» y «lleva semanas apagada» se ven idénticas.
+
+                     Solo se pinta cuando la propuesta se ACABA de pedir —ver sugerenciaView.Sugerida—:
+                     fuera de ese caso el campo trae la propuesta que arma esta consola con las líneas,
+                     y decir «lo redactó el modelo» sería mentir sobre un texto que el modelo no ha
+                     visto. */}}
+                {{ if .Sugerencia.Sugerida }}
+                <p class="section-note" id="solicitud-sugerencia-origen">{{ .Sugerencia.OrigenText }}</p>
+                {{ end }}
                 {{/* El texto propuesto es una PROPUESTA: lo que la revisión guarda es byte a byte lo
                      que se envió, y su autora es la dueña (D-044.19). Por eso se ofrece editable y no
                      como un resumen de solo lectura con un botón al lado. */}}
@@ -362,6 +377,20 @@ de `.URLs`, que se compone en Go con las mismas constantes con las que se regist
             <p class="section-note" id="solicitud-aprobar-sin-precio">Quedan líneas sin precio: la
                 plataforma va a rechazar la aprobación hasta que las pongas a precio en el borrador de
                 arriba.</p>
+            {{ end }}
+            {{ if .SinPrecio }}
+            {{/* LAS LÍNEAS QUE LA PLATAFORMA OBJETÓ al rechazar una aprobación, y no las que esta
+                 pantalla contó: el aviso de arriba es una advertencia previa, esto es el rechazo.
+
+                 🔴 EL NÚMERO ES LA POSICIÓN EN LA INTERPRETACIÓN Y NO LA FILA DEL FORMULARIO, así que
+                 lo que identifica la línea aquí es la ETIQUETA. El porqué está en lineaSinPrecio:
+                 esta pantalla reparte las líneas en dos listas y renumera solo una, de modo que
+                 anclar el defecto a una fila marcaría una ajena sin que nada fallara. */}}
+            <ul class="chip-list" id="solicitud-aprobar-lineas-sin-precio">
+                {{ range .SinPrecio }}
+                <li>Línea {{ .Posicion }}{{ if .Etiqueta }} · «{{ .Etiqueta }}»{{ end }}</li>
+                {{ end }}
+            </ul>
             {{ end }}
             <p class="actions-row"><button type="submit" class="btn btn--primary">Aprobar y responder</button></p>
         </form>
