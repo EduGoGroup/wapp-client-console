@@ -75,6 +75,11 @@ func paginasRenderizadas(t *testing.T, router http.Handler) map[string]*httptest
 		// La BANDEJA (T7.2): la lista con su tabla, su paginador y su formulario de descarte, y las
 		// DOS pantallas del descarte, que son HTML que ningún GET sirve.
 		"GET /api/v1/intakes": {http.StatusOK, laBandejaDeCampo()},
+		// EL DETALLE (T7.3), que es la superficie de HTML más grande del repo: seis tarjetas, cuatro
+		// tablas y SIETE formularios, dos de ellos con `<textarea>` y uno con un `<select>`. Es donde
+		// más fácil se cuela un `style=` o un `onchange=`, y además la única pantalla que pinta texto
+		// que escribió una persona por WhatsApp.
+		"GET /api/v1/intakes/{id}": {http.StatusOK, solicitudDeCampo()},
 		"POST /api/v1/intakes/discard": {http.StatusOK, descarteBody(
 			[]string{testIntakeID}, map[string]string{testOtroIntake: "live_event"})},
 	}
@@ -92,6 +97,9 @@ func paginasRenderizadas(t *testing.T, router http.Handler) map[string]*httptest
 		"flujo_detalle":    rutaFlujos + "/" + testFlowID,
 		"disparadores":     rutaDisparadores,
 		"solicitudes":      rutaSolicitudes + "?page_size=5",
+		// El DETALLE (T7.3) se recorre sobre la solicitud de campo, que trae las cuatro clases de
+		// línea y por tanto pinta las cuatro tablas y los siete formularios.
+		"solicitud": rutaSolicitudes + "/" + testIntakeID,
 	} {
 		rec := getWithSession(t, routerAdmin, ruta)
 		if rec.Code != http.StatusOK {
@@ -168,6 +176,7 @@ func paginasRenderizadas(t *testing.T, router http.Handler) map[string]*httptest
 		"flujos_sin_empresa":           rutaFlujos,
 		"disparadores_sin_empresa":     rutaDisparadores,
 		"solicitudes_sin_empresa":      rutaSolicitudes,
+		"solicitud_sin_empresa":        rutaSolicitudes + "/" + testIntakeID,
 	} {
 		rec := getConCookie(routerAdmin, ruta, sinTenant)
 		if rec.Code != http.StatusOK {
@@ -236,6 +245,9 @@ func TestPaginas_TodasLasPantallasAutenticadasEstanCubiertas(t *testing.T) {
 		// paginador se pinte: con el tamaño por defecto las siete solicitudes de campo caben en una
 		// página y el bloque del paginador no se emitiría.
 		rutaSolicitudes: true,
+		// El detalle (T7.3) entra por su patrón —`/solicitudes/:id`—, que es como lo registra el
+		// router.
+		rutaSolicitudes + rutaSolicitudDetalle: true,
 	}
 	for ruta := range rutasGET {
 		if !cubiertas[ruta] {
@@ -279,6 +291,24 @@ func TestPaginas_LaFamiliaMiraLaRamaCOMPLETADeLaBandeja(t *testing.T) {
 		if !strings.Contains(completa.Body.String(), ancla) {
 			t.Errorf("la captura `solicitudes` no trae %s: la familia está escaneando la pantalla "+
 				"VACÍA y un style= o un <script> en la rama completa pasaría inadvertido", ancla)
+		}
+	}
+
+	// 🆕 EL DETALLE (T7.3) cuelga del MISMO gate de grupo, así que corre exactamente el mismo riesgo
+	// —y con más superficie: es la pantalla con más HTML del repo—. Sus anclas son de la rama que solo
+	// existe con `cart_basic` y con la solicitud servida: la ficha, la comparación (que pinta texto de
+	// una persona), el borrador editable y los dos formularios con `<textarea>`.
+	detalle, ok := renders["solicitud"]
+	if !ok {
+		t.Fatal("la familia no captura `solicitud`: el detalle quedó fuera de los tests de CSP")
+	}
+	for _, ancla := range []string{
+		`id="section-solicitud"`, `id="section-solicitud-comparacion"`,
+		`id="table-solicitud-borrador"`, `id="form-solicitud-aprobar"`, `id="form-solicitud-lineas"`,
+	} {
+		if !strings.Contains(detalle.Body.String(), ancla) {
+			t.Errorf("la captura `solicitud` no trae %s: la familia está escaneando una pantalla "+
+				"incompleta y un style= o un <script> en la rama completa pasaría inadvertido", ancla)
 		}
 	}
 

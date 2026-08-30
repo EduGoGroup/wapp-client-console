@@ -1,6 +1,15 @@
 package web
 
-// solicitudes_estado.go es el diccionario de PRESENTACIÓN de los estados de una solicitud.
+import (
+	"log/slog"
+	"net/http"
+	"strings"
+
+	"github.com/gin-gonic/gin"
+)
+
+// solicitudes_estado.go es el diccionario de PRESENTACIÓN de los estados de una solicitud, y desde
+// T7.4 también la acción que la mueve de uno a otro.
 //
 // Que quede claro qué NO es, porque la distinción es la que sostiene esta pantalla: aquí no hay
 // máquina de estados. No se dice desde dónde se llega a cada estado ni adónde se puede ir —eso lo
@@ -9,9 +18,16 @@ package web
 // devuelve la clave cruda y el filtro no lo lista, pero nada opera mal ni se ofrece una transición
 // falsa.
 //
-// 📌 Viaja en T7.2 y no en T7.3, aunque el plan la ponga allí: `intakes.html` —la pantalla de esta
-// casilla— la usa para rotular el estado de cada fila, así que sin ella la lista no se puede pintar.
-// T7.3 la da por hecha.
+// El handler de abajo no cambia eso: mover una solicitud es pedírselo a la plataforma y contar qué
+// dijo. Quien decide si la transición vale es la máquina de estados del cloud, aquí y en el 422.
+//
+// 📌 El diccionario viaja en T7.2 y no en T7.3, aunque el plan lo ponga allí: `solicitudes.html` usa
+// statusLabel para rotular el estado de cada fila, así que sin él la lista no se puede pintar.
+
+// campoEstado es el nombre del `<select>` del formulario. Va como constante por lo mismo que los
+// campos de las líneas: lo lee el handler y lo escribe la plantilla, y un desajuste entre los dos no
+// lo detecta el compilador. En inglés, como todo lo que viaja por el cable.
+const campoEstado = "status"
 
 // estadoDeSolicitud es una clave del ciclo de vida con su nombre de negocio.
 type estadoDeSolicitud struct {
@@ -63,4 +79,59 @@ func statusLabel(estado string) string {
 		return etiqueta
 	}
 	return estado
+}
+
+// CambiarEstadoSolicitud aplica la transición pedida en el desplegable del detalle (T7.4).
+//
+// 🔒 EL REPARTO DE DESENLACES, Y POR QUÉ ÉSTE CAE ENTERO DEL LADO DEL 303 (D-047.16):
+//
+//	sin estado ........ 303 + flash. ES validación LOCAL y aun así NO repinta, y la diferencia con
+//	                    el formulario de líneas es que aquí no hay NADA QUE PERDER: el control es un
+//	                    `<select>` sobre una lista cerrada que arma el servidor, no texto tecleado.
+//	                    La excepción del 400 existe para conservar lo escrito; sin nada escrito, es
+//	                    la misma regla con la que el borrado de un disparador va por 303.
+//	error de la API ... 303 + flash. Incluidos el 422 de transición inválida y el 409 de carrera.
+//	éxito ............. 303 + flash.
+//
+// 🔴 Lo que se PIERDE respecto del origen, dicho en voz alta: el BFF repintaba el 422 con los
+// destinos que trae ese rechazo (`allowed`) y el 409 con el estado recién releído. Tras el 303 la
+// página se relee igual, así que el 409 no pierde nada —el estado actual está delante mientras se
+// lee el aviso—; el 422 sí pierde su lista, y se acepta porque `allowed_transitions` del GET es la
+// misma autoridad y viene más fresca. Ver solicitudDetalleView.DesdeRechazo.
+func (h *AdminHandler) CambiarEstadoSolicitud(c *gin.Context) {
+	id := strings.TrimSpace(c.Param("id"))
+
+	// Sin empresa no hay solicitud que mover, y la API respondería 403 sobre una causa que no es esa.
+	// Un id vacío no lo produce el router: es una guarda para no gastar el viaje.
+	if sinEmpresa(c) || id == "" {
+		c.Redirect(http.StatusSeeOther, rutaSolicitudes)
+		return
+	}
+	destino := solicitudURL(id)
+
+	// El desplegable lleva `required`, pero eso lo cumple el NAVEGADOR: un POST hecho a mano llega
+	// sin estado. No se adivina ninguno —mover una solicitud al azar es peor que no moverla— y no se
+	// gasta el viaje para recibir el 400 que ya se sabe.
+	estado := formValue(c, campoEstado)
+	if estado == "" {
+		redirectWith(c, destino, flashSolicitudSinEstado, "")
+		return
+	}
+
+	var cambioErr error
+	code := flashCodeForEstado(h.auth.withAuthRetry(c, func(accessToken string) error {
+		_, err := h.api.Intakes.SetIntakeStatus(c.Request.Context(), accessToken, id, estado)
+		cambioErr = err
+		return err
+	}))
+	if sessionIsDead(cambioErr) {
+		h.auth.expireSession(c)
+		return
+	}
+	if code != "" {
+		// El estado pedido NO entra en el log: no es PII, pero tampoco hace falta, y el log de esta
+		// consola no acumula datos de negocio por comodidad de depuración.
+		slog.Warn("no se pudo cambiar el estado de la solicitud", "codigo", code, "error", cambioErr)
+	}
+	redirectWith(c, destino, code, flashSolicitudEstadoCambiado)
 }

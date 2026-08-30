@@ -213,6 +213,89 @@ const (
 	// seguro, porque lo ya descartado vuelve como `already_discarded`.
 	flashDescarteIncierto = "descarte_incierto"
 
+	// --- Desenlaces de las acciones QUE NO LE HABLAN AL CLIENTE (T7.4) ---
+	//
+	// Son las tres del detalle que solo tocan la ficha: mover el estado, guardar las líneas
+	// facturables y corregir la interpretación. Regenerar viaja aquí también porque tampoco le
+	// escribe a nadie: reinterpreta el texto que el cliente ya mandó.
+	//
+	// 🔴 Lo que NO cabe en esta tabla, y hay que decirlo porque el origen sí lo decía: los números.
+	// El BFF confirmaba el guardado con «la solicitud queda con 3 líneas y un total de 21000.00» y
+	// la regeneración con «aparecerá como la revisión 4 · trabajo abc». El catálogo traduce códigos
+	// a textos FIJOS y no interpola datos, así que esos números no viajan por la URL. No se pierden
+	// del todo: tras el 303 la ficha se relee y ahí están las líneas, el total y el histórico de
+	// revisiones. Lo que se pierde es la frase que los señalaba.
+
+	// flashSolicitudSinEstado es el rechazo LOCAL de un envío sin estado. El desplegable lleva
+	// `required`, así que solo llega por un POST hecho a mano; se contesta igual porque `required`
+	// es del navegador y no una guarda.
+	flashSolicitudSinEstado = "solicitud_sin_estado"
+	// flashSolicitudTransicionInvalida traduce el 422 `invalid_transition`.
+	//
+	// 🔴 El origen repintaba con los destinos que trae ese rechazo (`allowed`) para reponer el
+	// desplegable. Aquí NO: D-047.16 manda el desenlace de la API por 303, y tras el 303 el
+	// desplegable se arma con `allowed_transitions` del GET, que es la misma autoridad y está más
+	// fresca. Por eso el texto manda a mirarlo en vez de enumerar destinos que no puede saber.
+	flashSolicitudTransicionInvalida = "solicitud_transicion_invalida"
+	// flashSolicitudCambiadaPorOtro traduce ErrIntakeChanged, el 409 que emiten las tres puertas
+	// que escriben sobre una solicitud.
+	//
+	// 🔴 NO puede caer en el genérico: en esta consola ErrConflict significa «ya existe algo con ese
+	// nombre» (un rol repetido), y el consejo que hace falta aquí es RECARGAR. Tras el 303 la ficha
+	// ya se releyó, así que lo recargado está delante mientras se lee el aviso.
+	flashSolicitudCambiadaPorOtro = "solicitud_cambiada_por_otro"
+	// flashSolicitudFormularioIncompleto es el rechazo LOCAL de un envío cuyos cinco campos por
+	// fila no vienen emparejados: antes que adivinar qué precio va con qué artículo —y guardar una
+	// mezcla— se rechaza y se pide recargar.
+	flashSolicitudFormularioIncompleto = "solicitud_formulario_incompleto"
+	// flashSolicitudLineaSinIdentificar es el rechazo LOCAL de un «Quitar» cuyo índice no señala
+	// ninguna fila del envío.
+	flashSolicitudLineaSinIdentificar = "solicitud_linea_sin_identificar"
+	// flashSolicitudLineasIlegibles es el rechazo LOCAL de una cantidad o un precio que no se
+	// pueden leer. Encabeza la lista de defectos que la pantalla pinta fila a fila: el aviso dice
+	// que no se guardó NADA, y los defectos dicen dónde.
+	flashSolicitudLineasIlegibles = "solicitud_lineas_ilegibles"
+	// flashSolicitudLineasRechazadas traduce el 400 `invalid_items` de la plataforma.
+	//
+	// 🔑 Es el ÚNICO desenlace de la API de esta consola que NO viaja por la URL: se pinta
+	// REPINTANDO (D-047.16 extendida el 2026-08-30), porque la edición es todo-o-nada y un
+	// `invalid_items` no llegó a escribir nada. Este texto es solo el ENCABEZADO; la lista de
+	// defectos por línea que trae el cuerpo la pinta la pantalla anclada a su fila, que es lo que de
+	// verdad sirve para corregir.
+	flashSolicitudLineasRechazadas = "solicitud_lineas_rechazadas"
+	// flashSolicitudNoEditable traduce el 422 `not_editable`: el estado en el que está la solicitud
+	// no admite tocar sus líneas. El camino se dice —moverla con el desplegable— sin nombrar los
+	// estados, que llegan en el rechazo y no caben en un texto fijo.
+	flashSolicitudNoEditable = "solicitud_no_editable"
+
+	// Los de REGENERAR. Son SEIS y no uno porque llevan a sitios distintos: contratar el plan,
+	// contratar el add-on, configurar la credencial, esperar, o nada. Un aviso único mandaría a
+	// comprar algo que ya se tiene.
+
+	// flashRegeneracionSinPlan es la falta de `llm_intake`: se contrata.
+	flashRegeneracionSinPlan = "regeneracion_sin_plan"
+	// flashRegeneracionSinAddon es la falta de `api_llm` con la vía externa configurada: o se
+	// contrata el add-on, o se cambia la vía. Es OTRO código que el de arriba a propósito.
+	flashRegeneracionSinAddon = "regeneracion_sin_addon"
+	// flashRegeneracionSinCredencial es el 422 de credencial ausente: NO hay nada que contratar, y
+	// decirlo con las palabras del paywall mandaría a comprar algo que la empresa ya tiene.
+	flashRegeneracionSinCredencial = "regeneracion_sin_credencial"
+	// flashRegeneracionSinOriginal es el 422 `source_unavailable`. El texto no separa `purged` de
+	// `never_stored` porque el bloque de comparación de la misma página ya lo dice con esas dos
+	// redacciones (ver origenView.RazonText): repetirlo aquí daría dos frases para un hecho.
+	flashRegeneracionSinOriginal = "regeneracion_sin_original"
+	// flashRegeneracionEnCurso es el 422 `reanalysis_in_progress`: ya hay una encargada.
+	flashRegeneracionEnCurso = "regeneracion_en_curso"
+	// flashRegeneracionViaInvalida es el 400 `invalid_via`. Esta consola NO manda vía (D-044.51),
+	// así que este rechazo no debería poder ocurrir; se traduce con todas las letras en vez de caer
+	// en el genérico porque, si ocurre, significa que alguien reintrodujo el campo.
+	flashRegeneracionViaInvalida = "regeneracion_via_invalida"
+	// flashRegeneracionTextoLargo es el material extra que no cabe. Lo emiten DOS puertas —la guarda
+	// local y el 400 `text_too_long` de la plataforma— con el mismo tope, y por eso comparten
+	// código: es el mismo hecho. CUÁNTO se pasó no está aquí sino en la vista (regenerarView.Runas),
+	// por lo mismo que los avisos con números del descarte.
+	flashRegeneracionTextoLargo = "regeneracion_texto_largo"
+
 	// --- Desenlaces del SELECTOR DE EMPRESAS (T5.3) ---
 
 	// flashTenantNotYours traduce el 404 de POST /api/v1/auth/active-tenant.
@@ -236,6 +319,18 @@ const (
 	flashFlowPublished  = "flow_published"
 	flashTriggerCreated = "trigger_created"
 	flashTriggerDeleted = "trigger_deleted"
+
+	// Los CUATRO éxitos de las acciones que no le hablan al cliente (T7.4). Son cuatro y no uno
+	// porque significan cosas distintas, y la que más lo necesita es la última: la regeneración se
+	// ENCARGA, no se hace, y un «listo» dejaría a la dueña recargando, viendo la interpretación
+	// vieja y creyendo que falló.
+	//
+	// Guardar líneas y corregir la interpretación van separados por lo mismo: son dos formularios
+	// sobre dos cosas distintas y la plataforma registra la segunda como corrección del dueño.
+	flashSolicitudEstadoCambiado     = "solicitud_estado_cambiado"
+	flashSolicitudLineasGuardadas    = "solicitud_lineas_guardadas"
+	flashSolicitudCorreccionGuardada = "solicitud_correccion_guardada"
+	flashRegeneracionEncargada       = "regeneracion_encargada"
 
 	flashMemberAdded   = "member_added"
 	flashMemberRemoved = "member_removed"
@@ -346,6 +441,41 @@ var (
 		flashDescarteIncierto: "No se pudo saber si el descarte llegó a hacerse. Mira la bandeja " +
 			"ANTES de repetirlo; volver a mandar el mismo lote es seguro, porque lo que ya esté " +
 			"descartado se queda como está.",
+
+		flashSolicitudSinEstado: "Elige el estado al que quieres mover la solicitud. No se ha " +
+			"cambiado nada.",
+		flashSolicitudTransicionInvalida: "Desde el estado en el que está esta solicitud no se puede " +
+			"pasar al que pediste, así que no se ha cambiado nada. El desplegable de abajo ofrece los " +
+			"destinos que la plataforma admite ahora.",
+		flashSolicitudCambiadaPorOtro: "Otra persona cambió esta solicitud mientras la mirabas, así " +
+			"que no se ha guardado nada. Abajo tienes el estado actual: revísalo y vuelve a intentarlo " +
+			"si sigue haciendo falta.",
+		flashSolicitudFormularioIncompleto: "El formulario llegó incompleto y no se ha guardado nada. " +
+			"Recarga la página e inténtalo de nuevo.",
+		flashSolicitudLineaSinIdentificar: "No se pudo identificar la línea que querías quitar, así " +
+			"que no se ha guardado nada. Recarga la página e inténtalo de nuevo.",
+		flashSolicitudLineasIlegibles: "No se ha guardado nada: hay cantidades o precios que no se " +
+			"pueden leer. Están marcados abajo, línea por línea.",
+		flashSolicitudLineasRechazadas: "La plataforma rechazó alguna de las líneas y NO se guardó " +
+			"nada: la corrección es todo o nada. Revisa cantidades y precios y vuelve a intentarlo.",
+		flashSolicitudNoEditable: "Desde el estado en el que está esta solicitud no se corrigen sus " +
+			"líneas, así que no se ha guardado nada. Muévela primero con el desplegable de estado.",
+		flashRegeneracionSinPlan: "No se pidió nada: el plan de tu empresa no incluye el análisis con " +
+			"IA. La bandeja se lee igual; lo que hace falta contratar es volver a interpretar.",
+		flashRegeneracionSinAddon: "No se pidió nada: la vía configurada de tu empresa es la API " +
+			"externa y el plan no incluye ese add-on. O se contrata, o se cambia la vía a la local " +
+			"desde los ajustes de LLM.",
+		flashRegeneracionSinCredencial: "No se pidió nada: el plan SÍ incluye la vía externa, pero tu " +
+			"empresa no tiene credencial configurada. No hay nada que contratar — se configura en los " +
+			"ajustes de LLM.",
+		flashRegeneracionSinOriginal: "No se pudo regenerar: no hay texto original del cliente para " +
+			"esta solicitud. El bloque de comparación de abajo dice por qué.",
+		flashRegeneracionEnCurso: "Ya hay una regeneración en curso para esta solicitud, así que no " +
+			"se ha encargado otra. Espera a que termine y recarga la página.",
+		flashRegeneracionViaInvalida: "La plataforma rechazó la vía de interpretación. Esta pantalla " +
+			"no propone ninguna: la fija la configuración de tu empresa, en los ajustes de LLM.",
+		flashRegeneracionTextoLargo: "No se pidió nada: el material extra no cabe. Debajo del campo " +
+			"está el tope y cuánto llevas escrito; recórtalo y vuelve a intentarlo.",
 	})
 
 	flashSuccesses = sharedweb.NewFlashCatalog("Acción completada.", map[string]string{
@@ -370,6 +500,16 @@ var (
 		flashTriggerCreated: "Disparador creado.",
 		flashTriggerDeleted: "Disparador borrado. Los flujos a los que llevaba siguen publicados: lo que se " +
 			"retiró es la regla que los arrancaba.",
+
+		flashSolicitudEstadoCambiado: "Estado cambiado. La ficha de abajo ya enseña el estado nuevo.",
+		flashSolicitudLineasGuardadas: "Líneas guardadas. La plataforma dejó constancia de la " +
+			"corrección; la ficha de arriba enseña las líneas y el total que quedaron.",
+		flashSolicitudCorreccionGuardada: "Corrección guardada. La plataforma la registra como " +
+			"corrección tuya —no como una interpretación más— y la usa para leer mejor los próximos " +
+			"pedidos parecidos.",
+		flashRegeneracionEncargada: "Regeneración encargada. TODAVÍA NO ESTÁ LISTA: la plataforma la " +
+			"procesa por detrás y lo que ves debajo sigue siendo la interpretación anterior. Vuelve a " +
+			"abrir esta solicitud en un momento para verla.",
 	})
 )
 
@@ -567,4 +707,97 @@ func flashCodeForDescarte(err error) string {
 func featureAusente(err error) bool {
 	_, ok := apiclient.FeatureNotEnabledOf(err)
 	return ok
+}
+
+// flashCodeForEstado es el traductor del CAMBIO DE ESTADO (T7.4).
+//
+// 🔴 NO delega en flashCodeForSolicitudes aunque sea la misma pantalla, y esa es la trampa que hay
+// que dejar escrita: aquel traduce cualquier ErrInvalidInput como «revisa las fechas (AAAA-MM-DD) y
+// el estado», porque su único 400 son los filtros del listado. Un 400 del cambio de estado no tiene
+// nada que ver con unos filtros, y el usuario leería un consejo sobre un formulario que no tocó.
+// Los planos comparten pantalla, no traductor.
+//
+// 🔴 EL ORDEN DE LAS RAMAS ES CONTRATO, y aquí son DOS los pares que dependen de él:
+//   - `*FeatureNotEnabledError` desenvuelve a ErrForbidden: preguntar antes por el genérico mandaría
+//     a pedir permisos en vez de a la contratación.
+//   - `ErrIntakeChanged` desenvuelve a ErrConflict, que en esta consola significa «ya existe algo con
+//     ese nombre». El consejo que hace falta es RECARGAR, y ése es un consejo que «ya existe» no da.
+func flashCodeForEstado(err error) string {
+	if err == nil {
+		return ""
+	}
+	if featureAusente(err) {
+		return flashSolicitudesSinPlan
+	}
+	if _, ok := apiclient.InvalidTransitionOf(err); ok {
+		return flashSolicitudTransicionInvalida
+	}
+	if errors.Is(err, apiclient.ErrIntakeChanged) {
+		return flashSolicitudCambiadaPorOtro
+	}
+	return flashCodeFor(err)
+}
+
+// flashCodeForLineas es el traductor de los DOS formularios de líneas: el de las facturables y el de
+// la interpretación. Es UNO para los dos porque van al mismo endpoint y sus rechazos son los mismos;
+// lo único que cambia entre ellos —dónde vuelve lo tecleado— no es cosa de esta tabla.
+//
+// El orden manda por lo mismo que arriba, con un tercer par propio: `*InvalidItemsError` y
+// `*NotEditableError` desenvuelven a ErrInvalidInput, así que preguntar antes por el genérico se
+// comería los dos únicos rechazos que dicen qué hacer.
+func flashCodeForLineas(err error) string {
+	if err == nil {
+		return ""
+	}
+	if featureAusente(err) {
+		return flashSolicitudesSinPlan
+	}
+	if _, ok := apiclient.InvalidItemsOf(err); ok {
+		return flashSolicitudLineasRechazadas
+	}
+	if _, ok := apiclient.NotEditableOf(err); ok {
+		return flashSolicitudNoEditable
+	}
+	if errors.Is(err, apiclient.ErrIntakeChanged) {
+		return flashSolicitudCambiadaPorOtro
+	}
+	return flashCodeFor(err)
+}
+
+// flashCodeForRegeneracion es el traductor de REGENERAR, y es el que más ramas tiene de la consola
+// porque es la puerta con más desenlaces nombrados: seis, y cada uno lleva a un sitio distinto.
+//
+// 🔴 El 403 se abre en DOS: `llm_intake` se contrata y `api_llm` es un add-on que además tiene
+// alternativa (cambiar la vía a la local). Mezclarlos mandaría a comprar lo que ya se tiene. Es la
+// única puerta de la bandeja donde `FeatureNotEnabledError.Feature` puede traer las dos, porque es
+// la única SIN el middleware de entitlements del cloud: el 403 lo emite su propio handler.
+//
+// 🔴 El 403 de capacidad y el 422 de credencial tampoco se dicen igual: uno lleva a contratar y el
+// otro a los ajustes.
+func flashCodeForRegeneracion(err error) string {
+	if err == nil {
+		return ""
+	}
+	if missing, ok := apiclient.FeatureNotEnabledOf(err); ok {
+		if missing.Feature == featureAPILLM {
+			return flashRegeneracionSinAddon
+		}
+		return flashRegeneracionSinPlan
+	}
+	if _, ok := apiclient.LLMCredentialsMissingOf(err); ok {
+		return flashRegeneracionSinCredencial
+	}
+	if _, ok := apiclient.SourceUnavailableOf(err); ok {
+		return flashRegeneracionSinOriginal
+	}
+	if _, ok := apiclient.ReanalysisInProgressOf(err); ok {
+		return flashRegeneracionEnCurso
+	}
+	if _, ok := apiclient.InvalidViaOf(err); ok {
+		return flashRegeneracionViaInvalida
+	}
+	if _, ok := apiclient.TextTooLongOf(err); ok {
+		return flashRegeneracionTextoLargo
+	}
+	return flashCodeFor(err)
 }

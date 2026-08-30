@@ -250,16 +250,30 @@ func TestGate_ElGateYLaPlantillaHablanDeLaMISMAFeature(t *testing.T) {
 
 // TestGate_ElUNICO403DeLaConsolaEsElDeLaFeature.
 //
-// 🔴 Esta casilla INAUGURA el 403 en este repo: antes de ella, `grep StatusForbidden` sobre
-// internal/web (sin tests) daba CERO — la consola solo emitía 400 (validación local) y un 404. El
-// candado no prohíbe que aparezca otro; obliga a que aparezca A PROPÓSITO, pasando por aquí, en vez
-// de colarse como el código con el que alguien traduzca el 403 de un upstream (que en esta casa se
-// traduce a flash, no a status).
+// 🔴 T7.2 INAUGURÓ el 403 en este repo: antes, `grep StatusForbidden` sobre internal/web (sin tests)
+// daba CERO — la consola solo emitía 400 (validación local) y un 404. El candado no prohíbe que
+// aparezca otro; obliga a que aparezca A PROPÓSITO, pasando por aquí, en vez de colarse como el
+// código con el que alguien traduzca el 403 de un upstream (que en esta casa se traduce a flash, no
+// a status).
+//
+// 🔒 SEGUNDO EMISOR, DECLARADO (T7.4): `solicitudes_comparacion.go`, cuando falta `llm_intake` al
+// pedir una regeneración. Es EL MISMO HECHO que corta el middleware —una capacidad que el plan no
+// incluye— dicho desde el otro lado de la puerta: el gate del grupo solo cubre `cart_basic`, porque
+// `llm_intake` lo exige el servicio de la plataforma y no su middleware, así que la bandeja abre y
+// esa acción no. Tiene que responder LO MISMO que el gate, o la consola diría dos cosas distintas
+// sobre «tu plan no lo incluye» sin que nadie lo hubiera decidido.
+//
+// Lo que sí cambia entre los dos es qué se pinta con ese 403, y también es deliberado: el gate sirve
+// la pantalla VACÍA (no hay nada que conservar) y la regeneración REPINTA el detalle con el material
+// extra tecleado dentro. El código de estado y el repintado son decisiones independientes.
 func TestGate_ElUNICO403DeLaConsolaEsElDeLaFeature(t *testing.T) {
 	t.Parallel()
 
 	emisores := ficherosConStatusForbidden(t)
-	want := map[string]bool{"solicitudes_gate.go": true}
+	want := map[string]bool{
+		"solicitudes_gate.go":        true,
+		"solicitudes_comparacion.go": true,
+	}
 	for _, f := range emisores {
 		if !want[f] {
 			t.Errorf("%s emite un 403 y no es el gate por feature: si es deliberado, añádelo a este "+

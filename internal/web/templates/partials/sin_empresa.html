@@ -1,14 +1,15 @@
 {{/*
 sin_empresa es lo que ve quien tiene sesión y todavía no pertenece a ninguna empresa.
 
-Es un parcial porque lo pintan NUEVE pantallas —la portada, sesiones, las tres de administración
+Es un parcial porque lo pintan DIEZ pantallas —la portada, sesiones, las tres de administración
 (miembros, invitaciones y roles), las tres del editor (flujos, el detalle de un flujo y disparadores)
-y la bandeja de solicitudes, a las que se puede llegar por la URL aunque la navegación no las
-ofrezca—, y el texto
-tiene que ser el mismo en las ocho: si cada una lo escribiera a su manera, la que menos se mira
+y las dos de la bandeja (el listado de solicitudes y el detalle de una), a las que se puede llegar por
+la URL aunque la navegación no las ofrezca—, y el texto
+tiene que ser el mismo en las diez: si cada una lo escribiera a su manera, la que menos se mira
 acabaría diciendo «no tienes permiso», que es justo el diagnóstico equivocado que este bloque existe
 para evitar. (Eran TRES hasta la Ola A, que estrenó la de invitaciones, CINCO hasta la Ola 6, que
-trajo las tres del editor desde el BFF, y OCHO hasta la Ola 7, que trajo la bandeja.)
+trajo las tres del editor desde el BFF, OCHO hasta la T7.2, que trajo el listado de la bandeja, y
+NUEVE hasta la T7.3, que trajo su detalle.)
 
 🔴 Este recuento se ha dado mal tres veces —«tres», «cuatro», «cinco»—, asi que cuéntalo, no lo copies:
     grep -rln 'template "sin_empresa"' internal/web/templates/

@@ -185,7 +185,7 @@
                     Marcar las {{ len .Solicitudes }} solicitudes de esta página
                 </label>
             </p>
-            {{ template "data_table" (tabla . "table-solicitudes" "Solicitudes recibidas por WhatsApp" "solicitudes_filas" "Descartar" "Solicitud" "Contacto" "Sesión" "Estado" "Total" "Creada (UTC)") }}
+            {{ template "data_table" (tabla . "table-solicitudes" "Solicitudes recibidas por WhatsApp" "solicitudes_filas" "Descartar" "Solicitud" "Contacto" "Sesión" "Estado" "Total" "Creada") }}
             <p class="actions-row">
                 <button type="submit" class="btn btn--primary" name="action" value="review">Revisar el descarte de lo marcado</button>
             </p>
@@ -250,7 +250,14 @@ eso dentro de ella `$` sigue significando lo mismo que en la página.
                     */}}
                     <td><span class="wapp-chip wapp-chip--neutral">{{ statusLabel .Status }}</span>{{ if .Overdue }}<span class="wapp-chip wapp-chip--danger">sin responder hace más de {{ $.HorasSinResponder }} h</span>{{ end }}</td>
                     <td>{{ printf "%.2f" .Total }}</td>
-                    <td>{{ .CreatedAt }}</td>
+                    {{/*
+                    🆕 La fecha se LEE, y el huso lo escribe el propio helper (T7.3, ver formato.go).
+                    Antes iba cruda —el ISO-8601 tal como lo devuelve el JSON— con un «(UTC)» en el
+                    encabezado de la columna: dos sitios que pueden dejar de decir lo mismo. Se pinta
+                    igual que en el detalle a propósito: dos redacciones de la misma fecha en dos
+                    pantallas de la misma bandeja harían dudar de si hablan del mismo instante.
+                    */}}
+                    <td>{{ fecha .CreatedAt }}</td>
                 </tr>
                 {{ end }}{{ end }}
 

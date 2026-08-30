@@ -158,7 +158,24 @@ func TestFlash_TodosLosCodigosDeLasPantallasTienenTexto(t *testing.T) {
 		// estarlo: el catálogo traduce códigos a textos fijos y no interpola datos (ver
 		// avisoSolicitudes), así que «se descartaron 3 de 5» viaja como vista y lo pinta la pantalla.
 		flashSolicitudesFiltrosInvalidos, flashSolicitudesSinPlan, flashDescarteRechazado,
-		flashDescarteIncierto} {
+		flashDescarteIncierto,
+		// Los de las CUATRO acciones que no le hablan al cliente (T7.4). SEIS de ellos NO viajan
+		// nunca por la URL —se pintan repintando el formulario (D-047.16): los tres de las líneas
+		// (`formulario_incompleto`, `linea_sin_identificar`, `lineas_ilegibles`), los dos de
+		// regenerar (`texto_largo` con 400, `sin_plan` con 403) y `lineas_rechazadas`, que es el
+		// único que viene de la API y aun así repinta porque no mutó nada—, pero su texto sale de
+		// esta misma tabla: uno escrito a mano en el handler sería el único de la consola fuera del
+		// catálogo. `regeneracion_sin_plan` además viaja por los dos caminos, porque el mismo hecho
+		// puede llegar como corte local o como 403 de la plataforma.
+		//
+		// Lo que sigue sin poder estar aquí son los números: «ahí van 281 caracteres» viaja como
+		// vista (regenerarView.Runas), igual que el desglose del descarte.
+		flashSolicitudSinEstado, flashSolicitudTransicionInvalida, flashSolicitudCambiadaPorOtro,
+		flashSolicitudFormularioIncompleto, flashSolicitudLineaSinIdentificar,
+		flashSolicitudLineasIlegibles, flashSolicitudLineasRechazadas, flashSolicitudNoEditable,
+		flashRegeneracionSinPlan, flashRegeneracionSinAddon, flashRegeneracionSinCredencial,
+		flashRegeneracionSinOriginal, flashRegeneracionEnCurso, flashRegeneracionViaInvalida,
+		flashRegeneracionTextoLargo} {
 		if !flashErrors.Known(code) {
 			t.Errorf("el código de error %q no tiene texto", code)
 		}
@@ -166,7 +183,9 @@ func TestFlash_TodosLosCodigosDeLasPantallasTienenTexto(t *testing.T) {
 	for _, code := range []string{flashLoggedOut, flashMemberAdded, flashMemberRemoved, flashRoleCreated,
 		flashRoleAssigned, flashRoleRemoved, flashMessageSent, flashProfileActive, flashProfilePassive,
 		flashInvitationRevoked, flashInvitationAccepted,
-		flashFlowPublished, flashTriggerCreated, flashTriggerDeleted} {
+		flashFlowPublished, flashTriggerCreated, flashTriggerDeleted,
+		flashSolicitudEstadoCambiado, flashSolicitudLineasGuardadas, flashSolicitudCorreccionGuardada,
+		flashRegeneracionEncargada} {
 		if !flashSuccesses.Known(code) {
 			t.Errorf("el código de éxito %q no tiene texto", code)
 		}

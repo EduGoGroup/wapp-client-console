@@ -372,3 +372,68 @@ body {
   user-select: all;
   cursor: text;
 }
+
+/* --- El detalle de una solicitud (T7.3) ---
+   SEIS clases que ninguna otra pantalla usa. Vienen de `intake-detail.html` del BFF, donde también
+   eran las únicas seis exclusivas de la bandeja, y se quedan LOCALES por eso mismo: son layout de UNA
+   pantalla, no componentes del ecosistema. Los colores salen de los tokens; no hay ni un literal.
+
+   `.cell-note` es la que más se usa: la nota pequeña que va DENTRO de una celda, pegada a su dato
+   —la personalización bajo el artículo, la procedencia del match, el adjunto que se nombra—. Es
+   `display: block` porque tiene que caer debajo y no seguir en la misma línea. */
+.cell-note {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--wapp-color-on-surface-variant);
+  line-height: 1.4;
+  margin-top: var(--wapp-space-1);
+}
+
+/* `.eyebrow` rotula cada columna de la comparación. Es un encabezado de sección en miniatura, no un
+   `<h3>`: los dos rótulos son hermanos dentro de una tarjeta que ya tiene su título. */
+.eyebrow {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--wapp-color-on-surface-variant);
+  margin-bottom: var(--wapp-space-2);
+}
+
+/* `.order-note` es la caja del TEXTO DEL CLIENTE: la indicación del pedido y el literal que escribió
+   por WhatsApp. Tiene caja propia porque no es prosa de esta consola sino una cita, y `white-space:
+   pre-wrap` conserva los saltos de línea tal como los tecleó — un mensaje de WhatsApp aplanado a un
+   párrafo pierde la lista que la persona escribió. */
+.order-note {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: var(--wapp-space-3);
+  border-left: 3px solid var(--wapp-color-border-variant);
+  background-color: var(--wapp-color-surface-variant);
+  color: var(--wapp-color-on-surface);
+  border-radius: var(--wapp-radius-sm);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.order-note__label {
+  font-weight: 700;
+}
+
+/* `.compare` son las DOS columnas del §7.6, y FLUYEN: es la misma lección que dejó la barra (ver
+   TestBarra_TodoContenedorFlexConControlesPuedeFLUIR). El texto que va dentro lo escribe un cliente
+   por WhatsApp, así que el ancho que pide esta caja NO TIENE COTA CONOCIDA; sin `wrap`, en una
+   pantalla estrecha una de las dos columnas se sale en vez de bajar. `min-width: 0` en las columnas
+   es lo que permite que su contenido se parta: sin él, un flex item no baja de su ancho intrínseco y
+   una palabra larga desborda igual. */
+.compare {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--wapp-space-4);
+  margin-top: var(--wapp-space-4);
+}
+
+.compare__col {
+  flex: 1 1 18rem;
+  min-width: 0;
+}

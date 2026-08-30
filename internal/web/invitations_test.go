@@ -675,6 +675,9 @@ func TestSinEmpresa_TodaPantallaQueLoPintaOfreceElMISMOCanje(t *testing.T) {
 		"flujo.html":        rutaFlujos + "/" + flujoNuevo,
 		"disparadores.html": rutaDisparadores,
 		"solicitudes.html":  rutaSolicitudes,
+		// El detalle de una solicitud (T7.3). Entra por un id cualquiera: sin empresa la pantalla
+		// corta ANTES de salir a la red, así que no hace falta que exista en el doble de la API.
+		"solicitud.html": rutaSolicitudes + "/" + testIntakeID,
 	}
 
 	entradas, err := templatesFS.ReadDir("templates/pages")

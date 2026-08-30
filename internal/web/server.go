@@ -261,12 +261,30 @@ func NewRouterWithLimiter(cfg *config.Config) (*gin.Engine, func()) {
 	// y hereda el gate sin acordarse de él. El porqué del 403 y del fail-closed está en
 	// solicitudes_gate.go.
 	//
-	// El verbo estático `descartar` se registra dentro del grupo; cuando llegue el detalle `/:id`
-	// (T7.3) irá DESPUÉS, que es la regla de esta casa (mismo criterio que /sesiones/enviar).
+	// El verbo estático `descartar` va ANTES del `:id` del detalle, que es la regla de esta casa
+	// (mismo criterio que /sesiones/enviar). Lo único que esa vecindad se comería es una solicitud que
+	// se llamara literalmente «descartar», y los identificadores son `in-…`.
+	//
+	// 📌 DE LAS SIETE ACCIONES DEL DETALLE HAY CUATRO, y son las que NO le hablan al cliente (T7.4):
+	// mover el estado, guardar las líneas facturables, corregir la interpretación y regenerarla.
+	// Ninguna manda un mensaje por WhatsApp —regenerar reinterpreta un texto ya recibido y el cliente
+	// no se entera—. Siguen SIN registrar las tres que sí le hablan o cuestan una inferencia:
+	// aprobar y pedir-info (T7.5) y sugerir-respuesta (T7.6); sus botones dan el 404 del router hasta
+	// entonces, y está dicho aquí para que no parezca un olvido.
+	//
+	// 🔑 Las rutas se componen con las MISMAS constantes de sufijo con las que solicitudes_detalle.go
+	// arma el `action` de cada formulario. Escribirlas aquí como literal daría dos cadenas que nadie
+	// compila y que pueden dejar de coincidir sin que nada falle: un formulario apuntando a una ruta
+	// que el router escribe distinto es un 404 que ningún gate ve venir.
 	solicitudes := protected.Group(rutaSolicitudes)
 	solicitudes.Use(adminH.requiereFeature(featureCartBasic, plantillaSolicitudes, tituloSolicitudes))
 	solicitudes.GET("", adminH.ShowSolicitudes)
 	solicitudes.POST(rutaDescartarSufijo, adminH.DescartarSolicitudes)
+	solicitudes.GET(rutaSolicitudDetalle, adminH.ShowSolicitudDetalle)
+	solicitudes.POST(rutaSolicitudDetalle+sufijoEstado, adminH.CambiarEstadoSolicitud)
+	solicitudes.POST(rutaSolicitudDetalle+sufijoLineas, adminH.GuardarLineasSolicitud)
+	solicitudes.POST(rutaSolicitudDetalle+sufijoCorregir, adminH.CorregirInterpretacionSolicitud)
+	solicitudes.POST(rutaSolicitudDetalle+sufijoRegenerar, adminH.RegenerarSolicitud)
 
 	var cleanup func()
 	if rateLimiter != nil {
@@ -305,9 +323,15 @@ func parseTemplates() *template.Template {
 		"tabla": tabla,
 		// `statusLabel` traduce la clave del ciclo de vida de una solicitud al nombre con el que la
 		// dueña del negocio la llama. Es helper de plantilla y no un campo de la vista porque lo usan
-		// las DOS pantallas de la bandeja —la lista y, cuando llegue, el detalle— sobre listas que
-		// vienen crudas de la API. Ver solicitudes_estado.go.
+		// las DOS pantallas de la bandeja —la lista y el detalle— sobre listas que vienen crudas de la
+		// API. Ver solicitudes_estado.go.
 		"statusLabel": statusLabel,
+		// `fecha` escribe un instante de la API para que lo lea una persona, y ESCRIBE ELLA el huso
+		// (T7.3). Es helper de plantilla por lo mismo que statusLabel: los instantes llegan dentro de
+		// tipos del apiclient que pintan las dos pantallas de la bandeja, y copiarlos a una vista solo
+		// para formatearlos habría dado dos redacciones del mismo dato. Ver formato.go, que es donde
+		// está escrito por qué el huso es UTC y no el de quien mira.
+		"fecha": fecha,
 	})
 	tmpl, err := root.ParseFS(templatesFS,
 		"templates/layouts/*.html",

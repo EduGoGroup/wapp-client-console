@@ -323,11 +323,10 @@ func loteDemasiadoGrande(n int) string {
 		"sobren o hazlo en varias tandas."
 }
 
-// cuentaSolicitudes escribe «1 solicitud» o «N solicitudes». Es una fea función de plural que existe
-// para que ningún mensaje de esta pantalla acabe diciendo «1 solicitudes».
-func cuentaSolicitudes(n int) string {
-	if n == 1 {
-		return "1 solicitud"
-	}
-	return strconv.Itoa(n) + " solicitudes"
-}
+// cuentaSolicitudes escribe «1 solicitud» o «N solicitudes», para que ningún mensaje de esta pantalla
+// acabe diciendo «1 solicitudes».
+//
+// Delega en `cuenta` (formato.go) desde T7.3: el detalle necesitaba el mismo plural con otro
+// sustantivo, y dos funciones de plural en el mismo paquete son dos sitios donde arreglar el día que
+// alguna diga «1 solicitudes».
+func cuentaSolicitudes(n int) string { return cuenta(n, "solicitud", "solicitudes") }
