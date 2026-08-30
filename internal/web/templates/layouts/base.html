@@ -74,6 +74,27 @@
             */}}
             <a href="/solicitudes" class="btn btn--text{{ if eq .CurrentPath "/solicitudes" }} btn--activo{{ end }}">Solicitudes</a>
             {{/*
+            LA IMPORTACIÓN DE CATÁLOGO (T8.2), que llega de wapp-guardian-bff en esta misma ola. Va
+            la ÚLTIMA de la fila porque es la que menos se usa: el catálogo se sube de tarde en tarde
+            y lo demás es trabajo diario.
+
+            🔴 EL ENLACE NO ESTÁ GATEADO POR `catalog_import`, POR EL MISMO MOTIVO ESCRITO ARRIBA
+            para «Solicitudes» — y esta vez con un enlace más de precio. Gatearlo exigiría que TODAS
+            las pantallas resolvieran el plan, porque el enlace vive en el layout y no en la página, y
+            esta consola lo resuelve SIN CACHÉ, una vez por petición. El precio de NO gatearlo es que
+            una empresa sin la capacidad ve el enlace y, al pulsarlo, recibe un 403 con la pantalla
+            que le explica que su plan no la incluye. Lo que NO se hace en ningún caso es lo contrario
+            —esconder el enlace y dejar la ruta abierta—, que es el agujero que T7.2 vino a cerrar.
+
+            ⚠️ Y ESTO ESTRECHA LA BARRA UN ENLACE MÁS: es el OCTAVO de los que dependen de tener
+            empresa, y el NOVENO control de la fila contando «Inicio». Ver el aviso de arriba: esta
+            fila ya expulsó «Cerrar sesión» una vez, los candados de barra_test.go solo vigilan que
+            todo contenedor flex pueda FLUIR, y ningún test de Go mide píxeles.
+            */}}
+            {{/* `eq` y no un prefijo, como el resto de la fila: la única ruta que cuelga de ésta es
+                 la descarga de la plantilla, y ésa no pinta ninguna página que pueda marcarse. */}}
+            <a href="/importar-catalogo" class="btn btn--text{{ if eq .CurrentPath "/importar-catalogo" }} btn--activo{{ end }}">Catálogo</a>
+            {{/*
             El SELECTOR DE EMPRESAS (T5.3), y está aquí porque es el único punto que cubre las seis
             pantallas de una vez: cambiar de empresa es navegación, como cerrar sesión, no una
             operación de la tabla que se esté mirando.

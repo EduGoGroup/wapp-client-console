@@ -678,6 +678,11 @@ func TestSinEmpresa_TodaPantallaQueLoPintaOfreceElMISMOCanje(t *testing.T) {
 		// El detalle de una solicitud (T7.3). Entra por un id cualquiera: sin empresa la pantalla
 		// corta ANTES de salir a la red, así que no hace falta que exista en el doble de la API.
 		"solicitud.html": rutaSolicitudes + "/" + testIntakeID,
+		// La importación de catálogo (T8.2). Llega hasta aquí aunque cuelgue de un gate por feature:
+		// el gate deja pasar sin empresa a propósito —sin empresa no se pregunta por el plan, porque
+		// /entitlements responde 401 y el 403 que saldría sería un diagnóstico falso—, así que la
+		// pantalla pinta su parcial como las demás.
+		"catalogo.html": rutaCatalogo,
 	}
 
 	entradas, err := templatesFS.ReadDir("templates/pages")

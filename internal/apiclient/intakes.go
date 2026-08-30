@@ -312,8 +312,12 @@ func InvalidTransitionOf(err error) (*InvalidTransitionError, bool) {
 
 // FeatureNotEnabledError es el 403 `feature_not_enabled`: al plan del tenant le falta una capacidad.
 // Trae CUÁL, porque las que pueden faltar llevan a sitios distintos —`cart_basic` es la bandeja,
-// `llm_intake` la bandeja con IA y `api_llm` el add-on de la vía externa— y un aviso genérico dejaría
-// al dueño sin saber qué contratar.
+// `llm_intake` la bandeja con IA, `api_llm` el add-on de la vía externa y `catalog_import` la carga
+// masiva del catálogo— y un aviso genérico dejaría al dueño sin saber qué contratar.
+//
+// 🆕 Vive en este fichero por dónde nació, pero NO es de la bandeja: lo emite el middleware de
+// entitlements, que es uno solo para toda la API pública, y desde T8.1 lo devuelve también
+// CatalogImportClient. La lista de arriba es la que hay que ampliar cuando un plano nuevo lo herede.
 //
 // 🔴 Lo emite el middleware de entitlements del cloud en OCHO de las nueve rutas de la bandeja
 // (`entitlements.RequireFeature`), antes de que el handler se ejecute: no es exclusivo de las rutas

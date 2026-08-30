@@ -1,0 +1,323 @@
+{{ define "catalogo.html" }}
+<section class="page-wide">
+    {{ if .SinEmpresa }}
+    {{ template "sin_empresa" . }}
+    {{/*
+    GATE SERVER-SIDE POR FEATURE. Sin `catalog_import` el bloque entero NO SE EMITE: no queda
+    escondido por CSS ni por JS —que además la CSP endurecida de esta consola no permitiría sin
+    nonce—, no está en el HTML.
+
+    🔴 ESTE GATE YA NO ES EL QUE DECIDE SI SE ENTRA: eso lo hace el middleware del grupo, que corta
+    con 403 ANTES de renderizar (solicitudes_gate.go, compartido con la bandeja). Esta rama es lo que
+    ese 403 pinta, y la razón de que siga siendo un `if` de plantilla y no una página aparte es que
+    así la denegación llega con el marco entero —la barra, la empresa activa y la navegación— en vez
+    de con un error suelto.
+    */}}
+    {{ else if $.Entitlements.Has "catalog_import" }}
+    <div class="wapp-card">
+        <h1 class="wapp-title">Importar catálogo</h1>
+        <p class="wapp-subtitle">
+            Sube tu catálogo entero —una planilla de Excel o CSV, o el documento JSON— o pega el JSON
+            aquí abajo. Primero se comprueba y se te enseña qué cambiaría; no se toca nada hasta que
+            lo confirmes.
+        </p>
+
+        {{ template "flashes" . }}
+    </div>
+
+    {{/*
+    PASO 2 — EL DIFF. Va lo primero de la página cuando existe, porque es lo que hay que leer antes
+    de decidir.
+
+    🔴 AQUÍ NO HAY DOS TIEMPOS VERBALES, a diferencia del origen en el BFF: este bloque solo pinta la
+    COMPROBACIÓN. Lo aplicado sale por 303 + flash (D-047.16) y lo cuenta el aviso de la pantalla
+    recién cargada, no un repintado del POST.
+    */}}
+    {{ with .Catalogo.Resultado }}
+    <div class="wapp-card card-stacked" id="section-catalogo-diff">
+        <h2 class="section-title">Esto es lo que pasaría</h2>
+        <p class="section-note">
+            {{ .Items }} artículo{{ if ne .Items 1 }}s{{ end }} en el documento · catálogo
+            «<span class="mono">{{ .Ref }}</span>»
+        </p>
+
+        {{/*
+        AVISOS DEL CATÁLOGO VIGENTE. Van los PRIMEROS y con el estilo más ruidoso a propósito: son
+        artículos y campos del catálogo que está EN USO y que el motor ya descarta en silencio, así
+        que NO están en el lado viejo de la comparación y no aparecerán abajo en «dejan de venderse»
+        aunque se pierdan de verdad. Esconderlos sería deshacer la única salvaguarda que hay contra
+        una pérdida invisible.
+        */}}
+        {{ with .Diff.CurrentWarnings }}
+        <div class="wapp-snackbar wapp-snackbar--error" role="alert" id="catalogo-avisos-vigentes">
+            <strong>Ojo con el catálogo que tienes ahora.</strong>
+            Esto ya estaba mal en el catálogo vigente y el motor lo ignora sin decir nada. Por eso no
+            sale en la comparación de abajo: si se pierde al aplicar, no lo verás en «dejan de
+            venderse».
+        </div>
+        <ul class="chip-list" id="catalogo-avisos-vigentes-lista">
+            {{ range . }}
+            <li class="wapp-chip wapp-chip--danger">{{ . }}</li>
+            {{ end }}
+        </ul>
+        {{ end }}
+
+        {{ if $.Catalogo.SinCambios }}
+        <p class="section-note" id="catalogo-sin-cambios">
+            Aplicar este documento no cambiaría ni un artículo del catálogo.
+        </p>
+        {{ else }}
+        <ul class="chip-list" id="catalogo-resumen">
+            <li class="wapp-chip wapp-chip--neutral">{{ len .Diff.PriceChanges }} cambian de precio</li>
+            <li class="wapp-chip wapp-chip--success">{{ len .Diff.Added }} nuevos</li>
+            <li class="wapp-chip wapp-chip--danger">{{ len .Diff.Removed }} dejan de venderse</li>
+            <li class="wapp-chip wapp-chip--info">{{ len .Diff.ChangedDetails }} cambian en otros datos</li>
+            <li class="wapp-chip wapp-chip--neutral">{{ .Diff.Unchanged }} quedan igual</li>
+        </ul>
+        {{ end }}
+
+        {{ if .Diff.Removed }}
+        <p class="section-note">Estos artículos están hoy en el catálogo y el documento no los trae:</p>
+        {{ template "data_table" (tabla $ "table-catalogo-bajas" "Artículos que dejan de venderse" "catalogo_bajas_filas" "SKU" "Artículo") }}
+        {{ end }}
+
+        {{ if .Diff.PriceChanges }}
+        {{ template "data_table" (tabla $ "table-catalogo-precios" "Artículos que cambian de precio" "catalogo_precios_filas" "SKU" "Artículo" "Antes" "Ahora") }}
+        {{ end }}
+
+        {{ if .Diff.Added }}
+        {{ template "data_table" (tabla $ "table-catalogo-altas" "Artículos nuevos" "catalogo_altas_filas" "SKU" "Artículo") }}
+        {{ end }}
+
+        {{ with .Diff.ChangedDetails }}
+        <p class="section-note" id="catalogo-otros-cambios">
+            Cambian en otros datos —mismo precio, pero cambia el nombre, las presentaciones, los
+            componentes, las etiquetas o la descripción—:
+            {{ range $i, $sku := . }}{{ if $i }}, {{ end }}<span class="mono">{{ $sku }}</span>{{ end }}.
+        </p>
+        {{ end }}
+    </div>
+    {{ end }}
+
+    {{/*
+    LA CONFIRMACIÓN — el segundo paso, el único que ESCRIBE. El documento viaja OCULTO y congelado:
+    se aplica exactamente lo que se acaba de enseñar, no lo que hubiera en un cuadro de texto
+    editable. La plataforma vuelve a validarlo y a compararlo por su cuenta, así que dos pestañas
+    abiertas no pueden confirmar la comprobación de la otra.
+    */}}
+    {{ if .Catalogo.EsperandoConfirmacion }}
+    <div class="wapp-card card-stacked" id="section-catalogo-confirmar">
+        <h2 class="section-title">Confirma la importación</h2>
+        <div class="wapp-snackbar wapp-snackbar--error" role="alert">
+            Al aplicar, este documento pasa a ser <strong>TODO</strong> el catálogo: lo que no venga
+            en él deja de venderse. El catálogo anterior se guarda como una versión antes de
+            reemplazarlo.
+        </div>
+        <form method="POST" action="/importar-catalogo" autocomplete="off" id="form-catalogo-confirmar">
+            <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+            {{/*
+            Con una planilla, este documento NO es lo que se subió: es lo que la plataforma leyó de
+            ella, ya traducido al contrato. Un .xlsx es binario y no cabe aquí, y volver a pedir el
+            fichero dejaría subir uno distinto del que se confirmó.
+            */}}
+            <input type="hidden" name="document" value="{{ .Catalogo.Documento }}">
+            {{/*
+            La ref viaja con el documento porque NO está dentro de él: el documento es portátil por
+            contrato. Sin arrastrarla, el paso 2 escribiría en una ref distinta de aquella contra la
+            que se calculó el diff que se acaba de leer.
+            */}}
+            <input type="hidden" name="ref" value="{{ .Catalogo.Resultado.Ref }}">
+            {{/*
+            🔴 «Descartar» va PRIMERO y con `autofocus` (mismo criterio que el descarte de la
+            bandeja, REQ-32f(a)): la salida segura es el foco inicial y la primera parada del
+            tabulador, así que quien llega por teclado y pulsa Enter NO aplica. Sigue siendo un `<a>`
+            porque es navegación, no una acción del formulario.
+
+            Y el botón que escribe manda `mode=apply` en su propio `name`/`value`: es lo ÚNICO que
+            separa este formulario del de abajo. Ver modoDelFormulario, que explica por qué un envío
+            sin ese valor —el Enter en un campo— cae en comprobar y nunca en aplicar.
+            */}}
+            <p class="actions-row">
+                <a href="/importar-catalogo" class="btn btn--text" autofocus>Descartar y empezar de nuevo</a>
+                <button type="submit" class="btn btn--danger" name="mode" value="apply">Aplicar este catálogo</button>
+            </p>
+        </form>
+    </div>
+    {{ end }}
+
+    {{/*
+    LOS DEFECTOS — la lista COMPLETA que devolvió el validador, no la primera. El motivo se pinta TAL
+    CUAL viene de la plataforma: está escrito ahí para el dueño del negocio y reescribirlo aquí sería
+    mantener dos redacciones que acabarían discrepando.
+
+    🔑 CADA DEFECTO VA CON SU UBICACIÓN EN LA MISMA LÍNEA, y ése es el punto: sin ella la lista dice
+    qué está mal pero no dónde, y con la ubicación equivocada manda a corregir la fila que no era.
+    Mismo criterio —y misma forma— que las listas de defectos del detalle de una solicitud.
+    */}}
+    {{ if .Catalogo.Defectos }}
+    <div class="wapp-card card-stacked" id="section-catalogo-defectos">
+        <h2 class="section-title">Qué hay que corregir</h2>
+        <ul class="link-list" id="catalogo-defectos">
+            {{ range .Catalogo.Defectos }}
+            <li class="link-list__item">{{ .Donde }} · <code class="mono">{{ .Campo }}</code>: {{ .Motivo }}</li>
+            {{ end }}
+        </ul>
+    </div>
+    {{ end }}
+
+    {{/*
+    PASO 1 — pegar o subir. Desaparece mientras hay un diff esperando confirmación: los dos pasos son
+    dos pantallas, y dejar el cuadro de texto ahí invitaría a editar lo que ya se comprobó.
+    */}}
+    {{ if not .Catalogo.EsperandoConfirmacion }}
+    <div class="wapp-card card-stacked" id="section-catalogo-subir">
+        <h2 class="section-title">Tu catálogo</h2>
+        <form method="POST" action="/importar-catalogo" class="stack-form" autocomplete="off"
+              enctype="multipart/form-data" id="form-catalogo-comprobar">
+            <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+
+            {{/*
+            QUÉ CATÁLOGO SE REEMPLAZA. Este campo faltaba en su día, y su ausencia era un defecto de
+            los que no fallan: el formulario mandaba la ref vacía, la plataforma caía a su default y
+            la pantalla enseñaba un diff contra un catálogo distinto del que se creía estar
+            reemplazando —«0 dejan de venderse» donde de verdad desaparecían 3—. Se confirmaba
+            convencida.
+
+            Es un `select` y no un campo de texto a propósito: un tecleo con una letra de más crearía
+            una ref nueva en silencio, que es el mismo fallo por otra puerta.
+            */}}
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="ref">¿Qué catálogo vas a reemplazar?</label>
+                <select class="wapp-field__control" id="ref" name="ref">
+                    {{ range .Catalogo.Refs }}
+                    <option value="{{ .Valor }}"{{ if .Elegida }} selected{{ end }}>{{ .Valor }}{{ if not .Existente }} (nuevo){{ end }}</option>
+                    {{ end }}
+                </select>
+                <p class="section-note">
+                    La comparación se calcula contra este catálogo, y al aplicar es el que se
+                    sobrescribe. El anterior queda archivado como una versión.
+                </p>
+            </div>
+
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="document">Documento del catálogo (JSON)</label>
+                <textarea class="wapp-field__control mono" id="document" name="document" rows="14"
+                          spellcheck="false"
+                          placeholder='{"format":"wapp.catalog_import","version":1,"catalog":{…}}'>{{ .Catalogo.Documento }}</textarea>
+            </div>
+
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="file">…o sube el fichero (Excel, CSV o JSON)</label>
+                {{/*
+                `accept` solo filtra el diálogo del navegador y no rechaza nada: quien decide qué es
+                cada fichero es la plataforma, y lo decide por su CONTENIDO. Por eso aquí no se cierra
+                más de la cuenta — un .xlsx renombrado sigue importando igual.
+                */}}
+                <input class="wapp-field__control" type="file" id="file" name="file"
+                       accept=".xlsx,.csv,.json,application/json,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+                <p class="section-note">
+                    Si eliges un fichero, se manda ése y se ignora lo que haya en el cuadro de arriba.
+                    La planilla se traduce sola: al comprobarla verás el mismo resumen de cambios que
+                    con un JSON. No puede pasar de 1 MB.
+                </p>
+            </div>
+
+            {{/*
+            El botón manda `mode=validate` explícito aunque sea el valor al que cae un envío sin
+            botón: la petición dice lo que quiere y la traza lo enseña, igual que el `page_size` de la
+            bandeja.
+            */}}
+            <p class="actions-row">
+                <button type="submit" class="btn btn--primary" name="mode" value="validate">Comprobar el documento</button>
+            </p>
+        </form>
+    </div>
+
+    <div class="wapp-card card-stacked" id="section-catalogo-ayuda">
+        <h2 class="section-title">¿No tienes el fichero? Que te lo escriba un asistente</h2>
+        <p class="section-note">
+            Descarga la plantilla, copia el texto de abajo y pégaselo a un asistente junto con la
+            plantilla y tu lista de productos con precios. Lo que te devuelva se pega aquí arriba.
+        </p>
+        {{/*
+        Ni una palabra que dé a entender que esto está probado contra un asistente real: el texto es
+        el del contrato, pero la corrida real sigue pendiente. Lo que sí se puede prometer es lo que
+        hace esta pantalla —comprobar antes de tocar nada—, y decirlo es lo que convierte un documento
+        dudoso en un problema que se ve a tiempo.
+        */}}
+        <p class="section-note">
+            Revisa siempre lo que te devuelva: por eso el primer paso comprueba el documento y te dice
+            qué está mal antes de cambiar nada.
+        </p>
+
+        <p class="actions-row" id="catalogo-plantillas">
+            {{ range .Catalogo.Plantillas }}
+            <a href="/importar-catalogo/plantilla?format={{ .Formato }}" class="btn btn--text">{{ .Etiqueta }}</a>
+            {{ end }}
+        </p>
+        <p class="section-note">
+            {{ range $i, $f := .Catalogo.Plantillas }}{{ if $i }} · {{ end }}{{ $f.Etiqueta }}: {{ $f.Pista }}{{ end }}.
+        </p>
+
+        {{/*
+        El prompt lo SIRVE la plataforma, donde está versionado junto al contrato. Aquí no hay copia
+        de reserva a propósito: una segunda fuente se quedaría vieja sin que nadie lo notara y le
+        dictaría al asistente un formato que el validador ya rechaza.
+        */}}
+        {{ if .Catalogo.Prompt.Cargado }}
+        <div class="wapp-field">
+            <label class="wapp-field__label" for="prompt">Texto para el asistente (selecciónalo y cópialo)</label>
+            <textarea class="wapp-field__control mono" id="prompt" rows="10" readonly>{{ .Catalogo.Prompt.Texto }}</textarea>
+        </div>
+        <p class="section-note">
+            Corresponde al contrato {{ .Catalogo.Prompt.Formato }} versión {{ .Catalogo.Prompt.Version }}.
+        </p>
+        {{ else }}
+        <p class="section-note" id="catalogo-prompt-caido">
+            No se pudo cargar el texto para el asistente ahora mismo. Recarga la página; mientras
+            tanto puedes pegar aquí arriba un documento que ya tengas.
+        </p>
+        {{ end }}
+    </div>
+    {{ end }}
+
+    {{ else }}
+    <div class="wapp-card" id="section-catalogo-sin-plan">
+        <h1 class="wapp-title">Importar catálogo</h1>
+        <p class="wapp-subtitle">
+            El plan de tu empresa no incluye la carga masiva del catálogo, así que esta pantalla no
+            tiene nada que enseñarte. No es cosa de tus permisos ni un fallo: habla con quien lleva la
+            contratación si la necesitas.
+        </p>
+    </div>
+    {{ end }}
+</section>
+{{ end }}
+
+{{/*
+LAS FILAS de las tres tablas del diff. El partial le pasa a estas plantillas el DOT DE LA PÁGINA, no
+la lista, y por eso dentro de ellas `$` sigue significando lo mismo que en la página.
+*/}}
+{{ define "catalogo_bajas_filas" }}{{ range .Catalogo.Resultado.Diff.Removed }}
+                <tr>
+                    <td class="mono">{{ .SKU }}</td>
+                    <td>{{ .Label }}</td>
+                </tr>
+                {{ end }}{{ end }}
+
+{{ define "catalogo_altas_filas" }}{{ range .Catalogo.Resultado.Diff.Added }}
+                <tr>
+                    <td class="mono">{{ .SKU }}</td>
+                    <td>{{ .Label }}</td>
+                </tr>
+                {{ end }}{{ end }}
+
+{{/* La etiqueta que se pinta es la NUEVA: la pantalla enseña el catálogo que viene, no el que se va. */}}
+{{ define "catalogo_precios_filas" }}{{ range .Catalogo.Resultado.Diff.PriceChanges }}
+                <tr>
+                    <td class="mono">{{ .SKU }}</td>
+                    <td>{{ .Label }}</td>
+                    <td>{{ printf "%.2f" .OldPrice }}</td>
+                    <td>{{ printf "%.2f" .NewPrice }}</td>
+                </tr>
+                {{ end }}{{ end }}

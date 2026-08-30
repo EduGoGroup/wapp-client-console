@@ -20,6 +20,20 @@ func homeRoutes(entitlements stubResponse) map[string]stubResponse {
 	}
 }
 
+// enlaceRealDelBloque es el ancla del ENLACE a la pantalla dentro del bloque gateado.
+//
+// 🆕 Hasta T8.2 este bloque no llevaba enlace: decía «la pantalla de carga llega en la tanda
+// siguiente», que era un texto de espera. Ahora la pantalla existe y el bloque la ofrece, así que el
+// par ON/OFF de abajo mide el ENLACE y no solo la tarjeta — la tarjeta sin enlace volvería a ser una
+// promesa, y eso pasaría el aserto viejo.
+//
+// 🔴 Es un `id` y NO el `href`, y la diferencia es la que hace que este test siga midiendo algo: el
+// enlace de la BARRA apunta a la misma ruta y NO está gateado (decisión de T8.2), así que sale en
+// TODAS las páginas, incluida ésta y también sin la feature. Un aserto de ausencia sobre
+// `href="/importar-catalogo"` sería falso siempre, y el negativo de abajo saldría rojo por el motivo
+// equivocado — o, peor, alguien lo «arreglaría» borrándolo.
+const enlaceRealDelBloque = `id="link-importar-catalogo"`
+
 // TestPlanGate_ConLaFeatureElBloqueSeEmite (T1.5, mitad ON).
 func TestPlanGate_ConLaFeatureElBloqueSeEmite(t *testing.T) {
 	t.Parallel()
@@ -30,8 +44,16 @@ func TestPlanGate_ConLaFeatureElBloqueSeEmite(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET / status = %d, want 200. Body: %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), gatedBlockMarker) {
+	out := rec.Body.String()
+	if !strings.Contains(out, gatedBlockMarker) {
 		t.Error("con catalog_import efectiva, el bloque gateado debía emitirse")
+	}
+	// Y el bloque ofrece la pantalla DE VERDAD, con el enlace a la ruta que el router sirve.
+	if !strings.Contains(out, enlaceRealDelBloque) {
+		t.Error("el bloque gateado no lleva el enlace a la pantalla de importación")
+	}
+	if !strings.Contains(out, `href="`+rutaCatalogo+`"`) {
+		t.Errorf("el enlace del bloque no apunta a %q, que es la ruta que registra el router", rutaCatalogo)
 	}
 }
 
@@ -57,8 +79,19 @@ func TestPlanGate_SinLaFeatureElBloqueNoSeEmiteYElRestoSigueIntacto(t *testing.T
 	if strings.Contains(out, gatedBlockMarker) {
 		t.Error("sin catalog_import, el bloque gateado NO debía emitirse")
 	}
+	if strings.Contains(out, enlaceRealDelBloque) {
+		t.Error("sin la feature, la portada sigue ofreciendo el enlace a la pantalla de importación")
+	}
 	if strings.Contains(out, "Importar catálogo") || strings.Contains(out, "catalog_import") {
 		t.Error("sin la feature no debe quedar rastro del bloque en el HTML")
+	}
+	// 🔴 LO QUE ESTE TEST NO PUEDE AFIRMAR, dicho aquí para que nadie lo «arregle»: que la ruta
+	// `/importar-catalogo` no aparezca en el HTML. El enlace de la BARRA apunta a ella y NO está
+	// gateado a propósito (T8.2), así que sale también sin la feature. Lo que cierra esa puerta no es
+	// esta plantilla sino el gate POR RUTA, y su prueba está en catalogo_test.go.
+	if !strings.Contains(out, `>Catálogo</a>`) {
+		t.Error("la barra dejó de ofrecer «Catálogo» sin la feature: ese enlace NO va gateado, y si " +
+			"alguien lo gateó hay que decidirlo a propósito y actualizar el aviso de base.html")
 	}
 
 	// Lo que NO depende del plan sigue ahí. El plano de roles y miembros es CAPACIDAD BASE

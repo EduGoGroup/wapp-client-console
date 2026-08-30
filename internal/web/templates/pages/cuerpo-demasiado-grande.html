@@ -1,0 +1,34 @@
+{{ define "cuerpo-demasiado-grande.html" }}
+<section class="page-narrow">
+    {{/*
+    LA PÁGINA DEL 413. Es la respuesta del techo de cuerpo (catalogo_limite.go), y es una página
+    aparte y no un aviso dentro de la pantalla de importación por una razón mecánica, no estética: el
+    tope corta ANTES de que nadie lea el cuerpo —ése es el punto entero—, así que en este punto no hay
+    ref, ni documento, ni fichero, ni siquiera sesión resuelta que devolver al formulario. Lo único
+    honesto que se puede pintar es qué pasó, cuál era el techo y por dónde se vuelve.
+
+    🔴 POR ESO TAMPOCO LLEVA BARRA DE NAVEGACIÓN, y no es un olvido: el middleware que la pinta corre
+    por delante del CSRF, y el AuthMiddleware va DENTRO del grupo protegido, o sea después. Sin
+    sesión sembrada, `IsAuthenticated` es falso y el layout no emite la barra. El enlace de abajo es
+    lo que hace que esto no sea un callejón sin salida.
+
+    Lo que esta página NO puede hacer es reenviar nada: el fichero se elige otra vez a mano, porque un
+    `<input type=file>` no se rellena desde el servidor.
+    */}}
+    <div class="wapp-card" id="section-cuerpo-grande">
+        <h1 class="wapp-title">Eso no cabe</h1>
+        <p class="wapp-subtitle">
+            Lo que intentaste enviar pasa de {{ .LimiteMiB }} MB, que es el máximo que esta pantalla
+            acepta de una vez. <strong>No se ha tocado nada de tu catálogo</strong>: la consola lo
+            paró antes de leerlo.
+        </p>
+        <p class="section-note">
+            Si es una planilla o un JSON muy grande, pártelo en varias importaciones —por categorías,
+            por ejemplo— y ve comprobando cada una antes de aplicarla.
+        </p>
+        <p class="actions-row">
+            <a href="{{ .Volver }}" class="btn btn--primary">Volver a importar catálogo</a>
+        </p>
+    </div>
+</section>
+{{ end }}

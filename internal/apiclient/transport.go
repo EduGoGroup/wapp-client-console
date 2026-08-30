@@ -24,7 +24,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"strings"
 	"time"
 )
@@ -239,12 +241,20 @@ func (t *Transport) doWith(client *http.Client, req *http.Request, op string, tr
 	return resp, nil
 }
 
-// newAuthedRequest arma la petición con el Context Token de la sesión.
+// contentTypeJSON es el tipo de casi todo lo que sale de aquí. Va como constante porque desde T8.1
+// hay cuerpos que NO lo son —el documento de catálogo crudo y el sobre multipart— y el literal
+// repetido en tres sitios es justo lo que se desincroniza.
+const contentTypeJSON = "application/json"
+
+// newAuthedRequest arma la petición con el Context Token de la sesión, serializando `payload` a JSON.
 //
 // `path` ya viene con sus segmentos escapados por quien lo compone (ver pathSegment): este método no
 // re-escapa nada, porque hacerlo dos veces rompe los UUID con guiones tanto como no hacerlo ninguna.
+//
+// 🔴 NO LE PASES UN `[]byte` PENSANDO QUE MANDAS ESOS BYTES: `json.Marshal` de un slice de bytes es
+// su BASE64 entre comillas, así que el otro lado recibiría una cadena donde espera un documento. Eso
+// compila, viaja y solo se ve en campo. Para un cuerpo ya serializado está newBodyRequest.
 func (t *Transport) newAuthedRequest(ctx context.Context, method, path string, payload any, accessToken string) (*http.Request, error) {
-	var body io.Reader
 	var raw []byte
 	if payload != nil {
 		var err error
@@ -252,18 +262,104 @@ func (t *Transport) newAuthedRequest(ctx context.Context, method, path string, p
 		if err != nil {
 			return nil, fmt.Errorf("apiclient: serializar %s: %w", path, err)
 		}
+	}
+	// Sin cuerpo no se marca el tipo: un GET con `Content-Type` y sin nada dentro es ruido.
+	contentType := ""
+	if raw != nil {
+		contentType = contentTypeJSON
+	}
+	return t.newBodyRequest(ctx, method, path, contentType, raw, accessToken)
+}
+
+// newBodyRequest arma la petición autenticada con un cuerpo YA SERIALIZADO y el Content-Type que le
+// toque. Es el único sitio del paquete donde nace un *http.Request; newAuthedRequest es este mismo
+// con el cuerpo pasado antes por json.Marshal.
+//
+// Existe porque no todo lo que sale de aquí es un objeto JSON, y son dos casos concretos, los dos del
+// import de catálogo: el documento, que viaja CRUDO —tal como lo escribió el dueño del negocio, sin
+// reindentar ni reordenar campos, porque lo que se valida tiene que ser lo que él vio—, y el sobre
+// multipart de la planilla, que trae su boundary en el tipo.
+//
+// Un `raw` nil deja la petición SIN cuerpo (no con un cuerpo vacío): es lo que necesitan los GET.
+func (t *Transport) newBodyRequest(ctx context.Context, method, path, contentType string, raw []byte, accessToken string) (*http.Request, error) {
+	var body io.Reader
+	if raw != nil {
 		body = bytes.NewReader(raw)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, t.baseURL+path, body)
 	if err != nil {
 		return nil, fmt.Errorf("apiclient: construir petición %s: %w", path, err)
 	}
-	if raw != nil {
-		req.Header.Set("Content-Type", "application/json")
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
 	}
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", contentTypeJSON)
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	return req, nil
+}
+
+// filePart es UNA parte de fichero de un formulario multipart: en qué campo va, cómo se llama, qué
+// dice ser y qué lleva dentro.
+//
+// Va como struct y no como cuatro parámetros sueltos porque tres de ellos son cadenas consecutivas:
+// con nombres, cruzar el nombre del campo con el del fichero no compila; sin ellos compila, sube, y
+// el otro lado contesta «no llegó ningún archivo» sin que nada apunte a por qué.
+type filePart struct {
+	// Field es el nombre del campo del formulario, y lo fija el CONTRATO del endpoint —nunca el
+	// fichero—: la plataforma solo mira una parte y con un nombre concreto.
+	Field string
+	// Filename es el nombre con el que se anuncia el fichero. Es informativo: la plataforma reconoce
+	// el formato por el CONTENIDO, no por la extensión.
+	Filename string
+	// ContentType es el tipo declarado de la parte. Vacío ⇒ no se declara ninguno.
+	ContentType string
+	// Content son los bytes TAL CUAL. Aquí no se recodifica, ni se reordena, ni se mira por dentro.
+	Content []byte
+}
+
+// quoteEscaper protege las comillas de las cabeceras de la parte, igual que hace `mime/multipart`
+// por dentro en CreateFormFile. Se pierde al armar la cabecera a mano (ver newMultipartRequest), y
+// sin él un nombre de fichero con una comilla parte la cabecera en dos.
+var quoteEscaper = strings.NewReplacer("\\", "\\\\", `"`, "\\\"")
+
+// newMultipartRequest arma la petición de una SUBIDA DE FICHERO: compone el sobre multipart con UNA
+// parte y devuelve el request listo, con su Content-Type y su boundary ya puestos.
+//
+// 🔴 EL SOBRE SE COMPONE AQUÍ Y EN NINGÚN OTRO SITIO, y esa es una regla de la casilla T8.1, no una
+// preferencia: quien atiende el formulario de la pantalla no debe ver un `multipart.Writer`. Si el
+// armado viviera en el handler, la forma de lo que viaja por el cable la decidiría cada pantalla que
+// suba algo, y el día que haya una segunda subida habrá dos formas distintas de mandar un fichero.
+// Hay un test estructural en internal/web que lo vigila: ese paquete no importa `mime/multipart`.
+//
+// La cabecera de la parte se escribe a mano en vez de con CreateFormFile por UNA razón concreta:
+// CreateFormFile declara SIEMPRE `application/octet-stream`, y entonces el tipo del fichero que el
+// dueño subió se pierde en el único sitio donde queda escrito. El tipo no decide nada al otro lado
+// —la plataforma mira el contenido—, y justo por eso inventarlo sería poner una mentira donde no
+// hace falta ninguna.
+func (t *Transport) newMultipartRequest(ctx context.Context, method, path string, part filePart, accessToken string) (*http.Request, error) {
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+
+	h := make(textproto.MIMEHeader)
+	h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`,
+		quoteEscaper.Replace(part.Field), quoteEscaper.Replace(part.Filename)))
+	if part.ContentType != "" {
+		h.Set("Content-Type", part.ContentType)
+	}
+	w, err := mw.CreatePart(h)
+	if err != nil {
+		return nil, fmt.Errorf("apiclient: armar el formulario de %s: %w", path, err)
+	}
+	if _, err := w.Write(part.Content); err != nil {
+		return nil, fmt.Errorf("apiclient: escribir el fichero de %s: %w", path, err)
+	}
+	// El cierre escribe el delimitador FINAL. Sin él no llega un fichero vacío: llega un sobre
+	// truncado, que el otro lado no puede parsear y contesta como si no se hubiera subido nada.
+	if err := mw.Close(); err != nil {
+		return nil, fmt.Errorf("apiclient: cerrar el formulario de %s: %w", path, err)
+	}
+	// FormDataContentType es lo que lleva el boundary, y el boundary solo lo conoce este writer.
+	return t.newBodyRequest(ctx, method, path, mw.FormDataContentType(), buf.Bytes(), accessToken)
 }
 
 // decodeJSON lee el cuerpo 2xx en `out` y cierra siempre.
@@ -273,6 +369,25 @@ func decodeJSON(resp *http.Response, op string, out any) error {
 		return fmt.Errorf("apiclient: %s: decodificar respuesta: %w", op, err)
 	}
 	return nil
+}
+
+// readBytes lee el cuerpo 2xx ENTERO y cierra siempre. Es el hermano de decodeJSON para lo que NO
+// es JSON: hoy, la plantilla descargable del catálogo (un CSV o un XLSX).
+//
+// 🔴 Una respuesta más larga que `max` es un ERROR y no un recorte, y la diferencia importa: media
+// plantilla no se distingue de una entera al mirarla, así que se descargaría, se llenaría y la
+// rechazaría el import entero. El +1 del LimitReader es lo que permite NOTAR el exceso en vez de
+// entregar justo `max` bytes creyendo que era todo.
+func readBytes(resp *http.Response, op string, max int64) ([]byte, error) {
+	defer drainClose(resp.Body)
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, max+1))
+	if err != nil {
+		return nil, fmt.Errorf("apiclient: %s: leer respuesta: %w", op, err)
+	}
+	if int64(len(raw)) > max {
+		return nil, fmt.Errorf("apiclient: %s: la respuesta excede %d bytes", op, max)
+	}
+	return raw, nil
 }
 
 // discard consume y cierra el cuerpo de una respuesta que no trae datos (204).

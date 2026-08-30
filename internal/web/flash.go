@@ -380,6 +380,92 @@ const (
 	// caso nuevo en cuanto alguien lo mire.
 	flashSugerenciaSinLineas = "sugerencia_sin_lineas"
 
+	// --- Desenlaces de la IMPORTACIÓN DE CATÁLOGO (T8.2 · T8.3 · T8.4) ---
+	//
+	// 🔴 SON MUCHOS Y NO UNO PORQUE LLEVAN A SITIOS DISTINTOS, que es la regla de esta tabla desde los
+	// seis de regenerar: pegar otra cosa, subir otro fichero, partir el catálogo, contratar el plan, o
+	// esperar. Un «revisa lo que mandaste» genérico sobre una pantalla que acepta DOS entradas y
+	// escribe el catálogo entero deja a la dueña probando a ciegas.
+	//
+	// 🔴 Lo que NO cabe en esta tabla —y el origen sí lo decía— son los NÚMEROS del diff: «documento
+	// comprobado: 42 artículos». El catálogo traduce códigos a textos FIJOS y no interpola datos, así
+	// que esa cuenta la pinta la pantalla, que además tiene el diff entero delante. No se pierde nada:
+	// se pierde la frase que lo señalaba.
+
+	// flashCatalogoSinDocumento es el rechazo LOCAL de un envío sin nada: ni pegado ni subido.
+	flashCatalogoSinDocumento = "catalogo_sin_documento"
+	// flashCatalogoNoEsJSON es el rechazo LOCAL de un texto PEGADO que no empieza por «{». El texto
+	// tiene que decir la salida, que es la que la gente no encuentra: una planilla no se pega, se
+	// sube con el botón de fichero.
+	flashCatalogoNoEsJSON = "catalogo_no_es_json"
+	// flashCatalogoArchivoIlegible es el rechazo LOCAL de un fichero que llegó y no se pudo leer.
+	flashCatalogoArchivoIlegible = "catalogo_archivo_ilegible"
+	// flashCatalogoArchivoGrande es el rechazo LOCAL por TAMAÑO DEL FICHERO, y es la comprobación que
+	// el origen NO tenía.
+	//
+	// 🔴 SIN ella este caso llegaba como el 413 del cloud, que por el camino tabular viene envuelto en
+	// `validation_failed` con `{"field":"archivo"}` y SIN el campo `max_bytes`: un rechazo por tamaño
+	// que no nombra ningún tamaño, leído además como si la planilla estuviera mal llenada. El texto de
+	// aquí SÍ dice la cifra, y hay un test que la ata a la constante para que no puedan separarse.
+	flashCatalogoArchivoGrande = "catalogo_archivo_grande"
+	// flashCatalogoModoDesconocido es el rechazo LOCAL de un `mode` con valor que esta pantalla no
+	// ofrece. El vacío NO llega aquí: cae en comprobar, ver modoDelFormulario.
+	flashCatalogoModoDesconocido = "catalogo_modo_desconocido"
+
+	// flashCatalogoDefectos es el ENCABEZADO de la lista de defectos del documento (400 con
+	// `validation_failed`).
+	//
+	// 🔑 Es el CUARTO desenlace de la API de esta consola que no viaja por la URL —repinta, como el
+	// `invalid_items` de las líneas—, y el motivo es el mismo: el import es todo-o-nada, así que un
+	// documento rechazado no escribió nada. Este texto es solo el encabezado; QUÉ está mal y DÓNDE lo
+	// pinta la pantalla, defecto a defecto y con su ubicación, que es lo que de verdad sirve para
+	// corregir el fichero.
+	flashCatalogoDefectos = "catalogo_defectos"
+	// flashCatalogoDemasiadoGrande traduce el 413 de la PLATAFORMA: lo que se mandó no cabe en su
+	// techo. Es OTRO código que flashCatalogoArchivoGrande a propósito —aquél lo decide esta consola
+	// sobre un fichero y puede decir la cifra; éste lo decide la plataforma y puede llegar por el paso
+	// 2, donde ya no hay ningún fichero del que hablar—, y la salida que ofrece es la única que hay:
+	// partir el catálogo.
+	flashCatalogoDemasiadoGrande = "catalogo_demasiado_grande"
+	// flashCatalogoSinPlan traduce el 403 `feature_not_enabled` de la plataforma.
+	//
+	// 🔴 Llega cuando el gate por ruta de esta consola dijo que sí y la plataforma dijo que no, o sea
+	// cuando el plan cambió entre las dos. NO puede caer en el genérico «tu usuario no tiene permiso»:
+	// no es un permiso lo que falta, es lo contratado.
+	flashCatalogoSinPlan = "catalogo_sin_plan"
+	// flashCatalogoNoComprobado es el genérico de COMPROBAR. Puede afirmar que no se tocó nada, y lo
+	// afirma: `mode=validate` no escribe por contrato de la plataforma.
+	flashCatalogoNoComprobado = "catalogo_no_comprobado"
+	// flashCatalogoNoAplicado es el genérico de APLICAR, y su texto es incómodo a propósito — mismo
+	// criterio que flashDescarteIncierto.
+	//
+	// 🔴 NO PUEDE DECIR «no se ha cambiado nada»: un 5xx o una conexión rota dejan a esta consola sin
+	// saber por dónde se cortó, y el catálogo pudo quedar reemplazado. Lo único honesto es mandar a
+	// comprobar el MISMO documento antes de repetir: si el resumen no trae cambios, ya estaba
+	// aplicado.
+	flashCatalogoNoAplicado = "catalogo_no_aplicado"
+
+	// flashCatalogoFormatoDesconocido es el rechazo LOCAL de un `?format=` que no está en la lista
+	// blanca. No sale a la red (lo corta el apiclient antes de gastar el viaje).
+	flashCatalogoFormatoDesconocido = "catalogo_formato_desconocido"
+	// flashCatalogoPlantillaAusente traduce el 404 de la descarga, y tiene aviso propio porque
+	// significa algo concreto: en la plataforma, la plantilla, el prompt y el propio import se montan
+	// JUNTOS o no se monta ninguno —para no mandar a nadie a llenar la plantilla de un import que no
+	// puede aplicar—, así que un 404 aquí no es «falta esta descarga» sino «puede que no haya import».
+	//
+	// 🔴 Por eso el texto NO remite al prompt como alternativa: con las rutas sin montar, ese texto
+	// tampoco carga, y prometerlo sería mandar a chocarse dos veces.
+	flashCatalogoPlantillaAusente = "catalogo_plantilla_ausente"
+	// flashCatalogoPlantillaInesperada es la plataforma contestando algo que NO es el formato que se
+	// le pidió, y por eso la descarga NO se sirve (ver apiclient.catalogMediaType).
+	//
+	// 🔴 NO puede caer en el genérico «inténtalo de nuevo»: ahí no hay un fallo pasajero, hay una
+	// discrepancia de contrato, y reintentar sobre un upstream que contesta otra cosa va a dar lo
+	// mismo. Lo accionable es cambiar de formato o avisar a quien administre la plataforma.
+	flashCatalogoPlantillaInesperada = "catalogo_plantilla_inesperada"
+	// flashCatalogoPlantillaFallo es el genérico de la descarga: no se pudo, y no se descargó nada.
+	flashCatalogoPlantillaFallo = "catalogo_plantilla_fallo"
+
 	// --- Desenlaces del SELECTOR DE EMPRESAS (T5.3) ---
 
 	// flashTenantNotYours traduce el 404 de POST /api/v1/auth/active-tenant.
@@ -435,6 +521,20 @@ const (
 	// resultado aparece dentro del campo de aprobar: sin esa frase, leer «propuesta lista» junto a un
 	// texto ya escrito en el hueco del envío se parece demasiado a haberlo mandado.
 	flashSugerenciaLista = "sugerencia_lista"
+
+	// El ÚNICO éxito de la importación (T8.2). Es uno y no dos porque comprobar NO tiene éxito de
+	// flash: su desenlace bueno es el diff repintado en la propia página, sin redirección.
+	//
+	// 🔴 Su texto no puede callar que el catálogo anterior sigue existiendo: es lo que convierte
+	// «acabo de reemplazar todo mi catálogo» en una decisión con vuelta atrás.
+	//
+	// 📌 LO QUE SE PIERDE CONTRA EL ORIGEN, dicho sin rebajarlo: el BFF confirmaba con «el catálogo
+	// anterior quedó guardado como versión 3». Ese número llega en la respuesta (`archived_version`) y
+	// NO cabe en esta tabla —el catálogo traduce códigos a textos fijos y no interpola datos—, y tras
+	// el 303 la pantalla vuelve al paso 1, que no tiene dónde pintarlo. Así que el texto dice el
+	// HECHO (se archivó) y no el número. Recuperarlo es cosa de la plataforma, que hoy no publica
+	// ninguna pantalla de versiones.
+	flashCatalogoAplicado = "catalogo_aplicado"
 
 	flashMemberAdded   = "member_added"
 	flashMemberRemoved = "member_removed"
@@ -609,6 +709,40 @@ var (
 		flashSugerenciaSinLineas: "No hay nada que sugerir: esta solicitud no tiene líneas que cotizar. " +
 			"Guarda primero las líneas del borrador de arriba y vuelve a pedir la propuesta. No se ha " +
 			"enviado nada.",
+
+		flashCatalogoSinDocumento: "No mandaste nada: pega el documento del catálogo en el cuadro o " +
+			"elige un fichero antes de comprobarlo.",
+		flashCatalogoNoEsJSON: "Lo que pegaste no es un documento JSON de catálogo: tiene que empezar " +
+			"por «{». Si lo tuyo es una planilla, no la pegues aquí — súbela con el botón de fichero.",
+		flashCatalogoArchivoIlegible: "No se pudo leer el fichero que subiste, así que no se ha " +
+			"comprobado nada. Vuelve a elegirlo e inténtalo de nuevo.",
+		flashCatalogoArchivoGrande: "Ese fichero pasa de 1 MB y no se ha mandado: es el máximo que la " +
+			"plataforma acepta de una vez. Parte el catálogo en varias importaciones —por categorías, " +
+			"por ejemplo— y ve comprobando cada una.",
+		flashCatalogoModoDesconocido: "No se entendió qué querías hacer con el documento, así que no " +
+			"se ha hecho nada. Vuelve a cargar la pantalla y usa los botones de la página.",
+		flashCatalogoDefectos: "El documento tiene problemas y NO se ha tocado nada de tu catálogo. " +
+			"Están todos abajo, con la fila o la categoría de cada uno: corrígelos y vuelve a comprobar.",
+		flashCatalogoDemasiadoGrande: "Lo que mandaste no cabe en el máximo que acepta la plataforma, " +
+			"así que no se ha tocado nada de tu catálogo. Pártelo en varias importaciones —por " +
+			"categorías, por ejemplo— y ve comprobando cada una.",
+		flashCatalogoSinPlan: "El plan de tu empresa ya no incluye la carga masiva del catálogo. No es " +
+			"cosa de tus permisos: habla con quien lleva la contratación.",
+		flashCatalogoNoComprobado: "No se pudo comprobar el documento ahora mismo. Inténtalo de nuevo; " +
+			"no se ha cambiado nada de tu catálogo.",
+		flashCatalogoNoAplicado: "No se pudo saber si el catálogo llegó a aplicarse. VUELVE A COMPROBAR " +
+			"EL MISMO DOCUMENTO ANTES DE REPETIRLO: si el resumen no trae ningún cambio, es que ya " +
+			"estaba aplicado.",
+		flashCatalogoFormatoDesconocido: "Esa plantilla no existe. Usa uno de los tres enlaces de " +
+			"descarga de esta página.",
+		flashCatalogoPlantillaAusente: "Esta plataforma no está sirviendo la plantilla, así que no se " +
+			"ha descargado nada. Suele significar que la importación de catálogo no está montada aquí " +
+			"todavía: si comprobar un documento también falla, avísale a quien administre la plataforma.",
+		flashCatalogoPlantillaInesperada: "La plataforma respondió algo que no es la plantilla que " +
+			"pediste, así que NO se ha descargado nada. Prueba con otro de los formatos y, si sigue " +
+			"igual, avísale a quien administre la plataforma: reintentar no lo va a arreglar.",
+		flashCatalogoPlantillaFallo: "No se pudo descargar la plantilla ahora mismo, así que no se ha " +
+			"descargado nada. Inténtalo de nuevo.",
 	})
 
 	flashSuccesses = sharedweb.NewFlashCatalog("Acción completada.", map[string]string{
@@ -653,6 +787,10 @@ var (
 
 		flashSugerenciaLista: "Propuesta lista en el campo de abajo. NO SE HA ENVIADO NADA y la " +
 			"solicitud sigue donde estaba: léela, cámbiala si hace falta y aprueba tú.",
+
+		flashCatalogoAplicado: "Catálogo aplicado: lo que subiste es a partir de ahora TODO tu " +
+			"catálogo, y lo que no venía en él ha dejado de venderse. El anterior NO se ha borrado: " +
+			"la plataforma lo archivó como una versión antes de reemplazarlo.",
 	})
 )
 
@@ -985,6 +1123,89 @@ func flashCodeForSugerencia(err error) string {
 		return flashSugerenciaSinLineas
 	}
 	return flashCodeFor(err)
+}
+
+// flashCodeForCatalogo es el traductor de la IMPORTACIÓN DE CATÁLOGO (T8.2).
+//
+// 🔴 ES EL ÚNICO TRADUCTOR DE ESTA CONSOLA QUE RECIBE UN SEGUNDO ARGUMENTO, y no es una comodidad:
+// `aplicando` NO cambia qué desenlace es, cambia qué se puede AFIRMAR sobre él. Ante el mismo 502,
+// comprobar puede decir «no se ha cambiado nada» —porque `mode=validate` no escribe por contrato de
+// la plataforma— y aplicar no puede decirlo: el catálogo entero pudo quedar reemplazado. Un texto
+// único para los dos o miente en la mitad de los casos, o asusta en la otra mitad. Es el mismo
+// criterio con el que `exitoDeLineas` elige entre dos éxitos que describen cosas distintas.
+//
+// 🔴 EL ORDEN DE LAS RAMAS ES CONTRATO, y aquí son TRES los pares que dependen de él:
+//   - `*FeatureNotEnabledError` desenvuelve a ErrForbidden: preguntar antes por el genérico mandaría
+//     a pedir permisos en vez de a la contratación.
+//   - `*CatalogTooLargeError` y `*CatalogImportInvalidError` desenvuelven LOS DOS a ErrInvalidInput
+//     (apiclient/catalogimport.go lo declara así a propósito): preguntar antes por el genérico
+//     convertiría los dos únicos rechazos que dicen qué hacer en «revisa lo que escribiste», y además
+//     dejaría el repintado con la lista de defectos sin disparar, porque el handler reconoce ese caso
+//     por el mismo tipo.
+//
+// Entre ellos dos el orden da igual —son tipos distintos y `errors.As` no los confunde—, pero se leen
+// en el orden en el que el cloud los produce: el tamaño se mide antes de validar nada.
+func flashCodeForCatalogo(err error, aplicando bool) string {
+	if err == nil {
+		return ""
+	}
+	if featureAusente(err) {
+		return flashCatalogoSinPlan
+	}
+	if _, ok := apiclient.CatalogTooLargeOf(err); ok {
+		return flashCatalogoDemasiadoGrande
+	}
+	if _, ok := apiclient.CatalogImportInvalidOf(err); ok {
+		return flashCatalogoDefectos
+	}
+	// El resto sale por el traductor de la casa SALVO su genérico, que dice «inténtalo de nuevo en un
+	// momento» y se calla justo lo único que hay que saber aquí: si el catálogo cambió o no.
+	if code := flashCodeFor(err); code != flashUpstreamUnavailable {
+		return code
+	}
+	if aplicando {
+		return flashCatalogoNoAplicado
+	}
+	return flashCatalogoNoComprobado
+}
+
+// flashCodeForPlantillaCatalogo es el traductor de la DESCARGA de la plantilla (T8.3), y es OTRO que
+// el del import aunque las dos puertas cuelguen de la misma capacidad: aquí no se manda ningún
+// documento, así que ni «no se ha cambiado nada» ni «no se sabe si se aplicó» describen nada. Lo que
+// hay que decir es que no se descargó el fichero, y por qué.
+//
+// 🔴 EL ORDEN DE LAS RAMAS ES CONTRATO por dos pares:
+//   - `ErrCatalogFormatUnsupported` desenvuelve a ErrInvalidInput, y es el único rechazo que NO gasta
+//     viaje: por el genérico se leería como «la plataforma rechazó los datos», que es falso — la
+//     plataforma ni se enteró.
+//   - `*FeatureNotEnabledError` desenvuelve a ErrForbidden, como siempre.
+//
+// El 404 va DESPUÉS de los dos anteriores y ANTES del genérico porque significa algo concreto: ver
+// flashCatalogoPlantillaAusente.
+func flashCodeForPlantillaCatalogo(err error) string {
+	if err == nil {
+		return ""
+	}
+	if errors.Is(err, apiclient.ErrCatalogFormatUnsupported) {
+		return flashCatalogoFormatoDesconocido
+	}
+	if featureAusente(err) {
+		return flashCatalogoSinPlan
+	}
+	if errors.Is(err, apiclient.ErrNotFound) {
+		return flashCatalogoPlantillaAusente
+	}
+	// 🆕 La plataforma contestó 200 con algo que no es lo que se pidió. Va ANTES del genérico y no
+	// después porque `ErrCatalogTemplateMismatch` NO envuelve a ningún sentinela de la casa —es un
+	// desacuerdo de contrato, no un permiso ni una ausencia—, así que caería en «inténtalo de nuevo en
+	// un momento», que es el único consejo que aquí seguro no sirve.
+	if errors.Is(err, apiclient.ErrCatalogTemplateMismatch) {
+		return flashCatalogoPlantillaInesperada
+	}
+	if code := flashCodeFor(err); code != flashUpstreamUnavailable {
+		return code
+	}
+	return flashCatalogoPlantillaFallo
 }
 
 // flashCodeForAprobar es el traductor de la APROBACIÓN (T7.5), la puerta que le responde al cliente

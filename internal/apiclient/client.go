@@ -9,7 +9,7 @@ import "time"
 // config) y el de inferencia (55s), y la única llamada que usa el segundo es
 // IntakesClient.SuggestIntakeQuote. El porqué está en transport.go.
 //
-// Los OCHO van en CAMPOS CON NOMBRE y no embebidos: `Members`, `Roles`, `Sessions`, `Invitations` y
+// Los NUEVE van en CAMPOS CON NOMBRE y no embebidos: `Members`, `Roles`, `Sessions`, `Invitations` y
 // `Tenants` tienen los cinco un `List`, y embebiéndolos la llamada `api.List(...)` sería un selector
 // ambiguo que ni siquiera compila. Con nombre, además, la llamada dice el plano al que va
 // —`api.Roles.Assign(…)` sobre una ruta que empieza por /members— que es justo la distinción que el
@@ -36,6 +36,10 @@ type Client struct {
 	// quien tiene la sesión y cuál elige. Es el único que acepta un `tenantID`; el porqué, en
 	// tenants.go.
 	Tenants *TenantsClient
+	// Catalog es la CARGA MASIVA del catálogo: la plantilla, el prompt, el documento y la planilla
+	// (Plan 047 · Ola 8, mudado del BFF). Es el único que sube un FICHERO, y por tanto el único cuyo
+	// cuerpo no es JSON; el sobre multipart lo arma el Transport, no la pantalla.
+	Catalog *CatalogImportClient
 }
 
 // New construye el cliente contra la API pública con el plazo por petición de la consola
@@ -51,5 +55,6 @@ func New(baseURL string, timeout time.Duration) *Client {
 		Editor:       NewEditorClient(t),
 		Intakes:      NewIntakesClient(t),
 		Tenants:      NewTenantsClient(t),
+		Catalog:      NewCatalogImportClient(t),
 	}
 }
