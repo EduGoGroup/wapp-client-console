@@ -1,0 +1,159 @@
+{{ define "disparadores.html" }}
+<section class="page-wide">
+    {{ if .SinEmpresa }}
+    {{ template "sin_empresa" . }}
+    {{ else }}
+    <div class="wapp-card">
+        <h1 class="wapp-title">Disparadores</h1>
+        <p class="wapp-subtitle">
+            Deciden qué flujo arranca ante un mensaje que entra. Para «editar» uno, bórralo y créalo
+            de nuevo: la plataforma no edita en sitio.
+        </p>
+
+        {{ template "flashes" . }}
+    </div>
+
+    <div class="wapp-card card-stacked" id="section-listado">
+        {{ if .TriggersError }}
+        <p class="section-note" id="disparadores-degradado">
+            No se pudo leer el listado de disparadores ahora mismo. El formulario de abajo sigue
+            sirviendo para crear uno.
+        </p>
+        {{ else if .Triggers }}
+        {{ template "data_table" (tabla . "table-disparadores" "Disparadores de esta empresa" "disparadores_filas" "Tipo" "Tipo de evento" "Palabra clave" "Coincidencia" "Flujo" "Prioridad" "Sesión" "Activo" "Acciones") }}
+        {{ else }}
+        <p class="empty-state" id="disparadores-vacio">
+            Esta empresa todavía no tiene disparadores. Crea uno abajo.
+        </p>
+        {{ end }}
+    </div>
+
+    <div class="wapp-card card-stacked" id="section-crear">
+        <h2 class="section-title">Crear un disparador</h2>
+        <p class="section-note" id="nota-tipos">
+            <strong>keyword</strong>: palabra clave que lleva a un flujo. <strong>fallback</strong>:
+            el flujo por defecto. <strong>escape</strong>: palabra clave que corta la conversación
+            (con un mensaje opcional). <strong>event_start</strong>: palabra clave que arranca o
+            conmuta el evento del tipo elegido. <strong>event_stop</strong>: palabra clave que
+            desactiva el evento activo sin cerrarlo.
+        </p>
+
+        {{/*
+        🔴 LOS OCHO CAMPOS VUELVEN CON LO QUE SE TECLEÓ cuando la validación local rechaza el alta
+        (D-047.16): la petición no llegó a salir, no hubo mutación y un 303 solo serviría para que
+        quien se dejó la palabra clave tenga que volver a escribir los otros siete.
+        */}}
+        <form method="POST" action="/disparadores" class="stack-form" id="form-crear-disparador" autocomplete="off">
+            <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="kind">Tipo</label>
+                <select class="wapp-field__control" id="kind" name="kind" required>
+                    <option value="keyword" {{ if or (not .Form.Kind) (eq .Form.Kind "keyword") }}selected{{ end }}>keyword</option>
+                    <option value="fallback" {{ if eq .Form.Kind "fallback" }}selected{{ end }}>fallback</option>
+                    <option value="escape" {{ if eq .Form.Kind "escape" }}selected{{ end }}>escape</option>
+                    <option value="event_start" {{ if eq .Form.Kind "event_start" }}selected{{ end }}>event_start</option>
+                    <option value="event_stop" {{ if eq .Form.Kind "event_stop" }}selected{{ end }}>event_stop</option>
+                </select>
+            </div>
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="keyword">
+                    Palabra clave <span class="section-note">(keyword, escape, event_start y event_stop)</span>
+                </label>
+                <input class="wapp-field__control" type="text" id="keyword" name="keyword"
+                       value="{{ .Form.Keyword }}" maxlength="128" placeholder="p. ej. hola">
+            </div>
+            {{/*
+            El catálogo de tipos de evento son los CUATRO de fábrica del despachador (D-043.3,
+            INV-07). `cart_llm` no está a propósito: se ofrece cuando la empresa tiene el plan que lo
+            incluye, y esta pantalla no gatea por plan.
+            */}}
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="event_kind">
+                    Tipo de evento <span class="section-note">(solo event_start)</span>
+                </label>
+                <select class="wapp-field__control" id="event_kind" name="event_kind">
+                    <option value="" {{ if not .Form.EventKind }}selected{{ end }}>—</option>
+                    <option value="menu" {{ if eq .Form.EventKind "menu" }}selected{{ end }}>menu</option>
+                    <option value="cart" {{ if eq .Form.EventKind "cart" }}selected{{ end }}>cart</option>
+                    <option value="survey" {{ if eq .Form.EventKind "survey" }}selected{{ end }}>survey</option>
+                    <option value="media" {{ if eq .Form.EventKind "media" }}selected{{ end }}>media</option>
+                </select>
+            </div>
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="match_type">Coincidencia</label>
+                <select class="wapp-field__control" id="match_type" name="match_type">
+                    <option value="exact" {{ if or (not .Form.MatchType) (eq .Form.MatchType "exact") }}selected{{ end }}>exact</option>
+                    <option value="contains" {{ if eq .Form.MatchType "contains" }}selected{{ end }}>contains</option>
+                </select>
+            </div>
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="flow_id">
+                    Flujo <span class="section-note">(keyword y fallback)</span>
+                </label>
+                <input class="wapp-field__control mono" type="text" id="flow_id" name="flow_id"
+                       value="{{ .Form.FlowID }}" maxlength="128" placeholder="flow_id destino">
+            </div>
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="priority">Prioridad</label>
+                <input class="wapp-field__control" type="number" id="priority" name="priority"
+                       value="{{ .Form.Priority }}" placeholder="0">
+            </div>
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="session_id">
+                    Sesión <span class="section-note">(opcional; vacío = todas)</span>
+                </label>
+                <input class="wapp-field__control mono" type="text" id="session_id" name="session_id"
+                       value="{{ .Form.SessionID }}" maxlength="128" placeholder="identificador de sesión">
+            </div>
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="message">
+                    Mensaje de corte <span class="section-note">(solo escape)</span>
+                </label>
+                <input class="wapp-field__control" type="text" id="message" name="message"
+                       value="{{ .Form.Message }}" maxlength="1024" placeholder="aviso al cortar la conversación">
+            </div>
+            <div class="wapp-actions">
+                <button type="submit" class="btn btn--primary">Crear disparador</button>
+            </div>
+        </form>
+    </div>
+    {{ end }}
+</section>
+{{ end }}
+
+{{/*
+LAS FILAS de la tabla de disparadores. El partial le pasa a esta plantilla el DOT DE LA PÁGINA, no la
+lista, y por eso `$.CSRFToken` del formulario de borrado significa aquí lo mismo que en la página.
+
+🔴 EL AVISO DE «SOMBREADO» ES LA ÚNICA COSA DE TODO EL ECOSISTEMA QUE PINTA `shadowed_by_event_list`.
+La plataforma calcula esa marca (D-043.20 / REQ-27b) para los `fallback` a los que la lista de
+eventos del despachador se ofrece antes, y si esta celda no la enseñara, la marca seguiría viajando
+por el cable sin que nadie la viera nunca — y la dueña seguiría creyendo que ese fallback contesta.
+*/}}
+{{ define "disparadores_filas" }}{{ range .Triggers }}
+                <tr>
+                    <td>
+                        <span class="wapp-chip wapp-chip--info">{{ .Kind }}</span>
+                        {{ if .Sombreado }}
+                        <span class="wapp-chip wapp-chip--danger">sombreado</span>
+                        <p class="section-note">
+                            En una conversación nueva responde antes la lista de eventos: este
+                            fallback no llega a dispararse ahí.
+                        </p>
+                        {{ end }}
+                    </td>
+                    <td>{{ if .EventKind }}{{ .EventKind }}{{ else }}—{{ end }}</td>
+                    <td>{{ if .Keyword }}{{ .Keyword }}{{ else }}—{{ end }}</td>
+                    <td>{{ .MatchType }}</td>
+                    <td class="mono">{{ if .FlowID }}{{ .FlowID }}{{ else }}—{{ end }}</td>
+                    <td>{{ .Priority }}</td>
+                    <td>{{ if .SessionID }}<code class="mono">{{ .SessionID }}</code>{{ else }}<span class="wapp-chip wapp-chip--neutral">todas</span>{{ end }}</td>
+                    <td>{{ if .Enabled }}<span class="wapp-chip wapp-chip--success">sí</span>{{ else }}<span class="wapp-chip wapp-chip--neutral">no</span>{{ end }}</td>
+                    <td>
+                        <form method="POST" action="/disparadores/{{ .TriggerID }}/borrar" class="inline-form">
+                            <input type="hidden" name="csrf_token" value="{{ $.CSRFToken }}">
+                            <button type="submit" class="btn btn--danger">Borrar</button>
+                        </form>
+                    </td>
+                </tr>
+                {{ end }}{{ end }}

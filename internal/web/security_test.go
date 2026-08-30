@@ -61,6 +61,13 @@ func paginasRenderizadas(t *testing.T, router http.Handler) map[string]*httptest
 		// CUATRO chips de estado y el botón de anular, que solo pinta la fila pendiente.
 		"GET /api/v1/invitations":  {http.StatusOK, invitacionesBody()},
 		"POST /api/v1/invitations": {http.StatusCreated, invitacionEmitidaBody(testInviteToken)},
+		// Las dos pantallas del EDITOR (T6.3/T6.4), enteras: la de flujos con su tabla y su detalle
+		// —que lleva el único <textarea> con contenido de la consola—, y la de disparadores con sus
+		// nueve columnas, sus chips y el formulario de OCHO campos, que es la superficie más grande
+		// de HTML de todo el repo y por tanto donde más fácil se cuela un `style=` o un `onchange=`.
+		"GET /api/v1/flows":      {http.StatusOK, flowsBody(flowJSON(testFlowID, 3, "2026-08-01T10:00:00Z"))},
+		"GET /api/v1/flows/{id}": {http.StatusOK, flowDefinitionBody},
+		"GET /api/v1/triggers":   {http.StatusOK, triggersBody(disparadorSombreado, disparadorNormal)},
 	}
 	api := newStubAPI(t, rutasAdmin)
 	routerAdmin := adminRouter(api)
@@ -71,6 +78,10 @@ func paginasRenderizadas(t *testing.T, router http.Handler) map[string]*httptest
 		"roles":            "/roles",
 		"invitaciones":     "/invitaciones",
 		"mi_identificador": "/mi-identificador",
+		"flujos":           rutaFlujos,
+		"flujo_nuevo":      rutaFlujos + "/" + flujoNuevo,
+		"flujo_detalle":    rutaFlujos + "/" + testFlowID,
+		"disparadores":     rutaDisparadores,
 	} {
 		rec := getWithSession(t, routerAdmin, ruta)
 		if rec.Code != http.StatusOK {
@@ -91,6 +102,22 @@ func paginasRenderizadas(t *testing.T, router http.Handler) map[string]*httptest
 	renders["invitaciones_con_token"] = getConCookies(routerAdmin, "/invitaciones",
 		clientSessionCookie(t), cookieDeInvitacion(t, routerAdmin))
 
+	// 🔴 LOS DOS REPINTADOS DE D-047.16 son HTML que NO se sirve en ningún GET: solo aparecen cuando
+	// la validación local rechaza una publicación o un alta, y llevan dentro justo lo que el usuario
+	// tecleó. Sin este par, el único HTML de esta consola que devuelve texto del usuario a la página
+	// quedaría fuera de los tests de CSP, de estilo inline y de JavaScript, y nadie lo notaría.
+	renders["flujo_repintado_400"] = postFormWithCSRF(routerAdmin, rutaFlujos, url.Values{
+		"flow_id": {testFlowID}, "is_new": {"0"}, "definition": {"esto no es json"},
+	}, clientSessionCookie(t))
+	renders["disparador_repintado_400"] = postFormWithCSRF(routerAdmin, rutaDisparadores, url.Values{
+		"kind": {"keyword"}, "keyword": {"hola"}, "flow_id": {""},
+	}, clientSessionCookie(t))
+	for _, nombre := range []string{"flujo_repintado_400", "disparador_repintado_400"} {
+		if rec := renders[nombre]; rec.Code != http.StatusBadRequest {
+			t.Fatalf("el repintado %q respondió %d, want 400 (D-047.16). Body: %s", nombre, rec.Code, rec.Body.String())
+		}
+	}
+
 	// Y las MISMAS pantallas en el estado «sin empresa», que es otra rama de plantilla —el parcial
 	// sin_empresa— y por tanto otro HTML que puede traer un style= o un <script> sin que ninguna de
 	// las capturas de arriba lo vea.
@@ -102,6 +129,8 @@ func paginasRenderizadas(t *testing.T, router http.Handler) map[string]*httptest
 		"roles_sin_empresa":            "/roles",
 		"invitaciones_sin_empresa":     "/invitaciones",
 		"mi_identificador_sin_empresa": "/mi-identificador",
+		"flujos_sin_empresa":           rutaFlujos,
+		"disparadores_sin_empresa":     rutaDisparadores,
 	} {
 		rec := getConCookie(routerAdmin, ruta, sinTenant)
 		if rec.Code != http.StatusOK {
@@ -162,6 +191,10 @@ func TestPaginas_TodasLasPantallasAutenticadasEstanCubiertas(t *testing.T) {
 	cubiertas := map[string]bool{
 		"/": true, "/sesiones": true, "/miembros": true, "/roles": true, "/invitaciones": true,
 		"/mi-identificador": true,
+		// El editor (T6.3/T6.4). El detalle entra por su patrón —`/flujos/:id`—, que es como lo
+		// registra el router, y se recorre con DOS peticiones: el valor mágico `nuevo` y un flujo de
+		// verdad, que son dos ramas distintas de la misma plantilla.
+		rutaFlujos: true, rutaFlujos + "/:id": true, rutaDisparadores: true,
 	}
 	for ruta := range rutasGET {
 		if !cubiertas[ruta] {

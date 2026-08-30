@@ -1,0 +1,45 @@
+{{ define "flujo.html" }}
+<section class="page-narrow">
+    {{ if .SinEmpresa }}
+    {{ template "sin_empresa" . }}
+    {{ else }}
+    <div class="wapp-card">
+        <p class="section-note"><a href="/flujos" class="btn btn--text">&larr; Volver a flujos</a></p>
+        <h1 class="wapp-title">
+            {{ if .IsNew }}Nuevo flujo{{ else }}Editar flujo: {{ .FlowID }}{{ end }}
+        </h1>
+        <p class="wapp-subtitle">
+            Publicar guarda una <strong>versión nueva</strong> (N+1) y conserva las anteriores. Ajusta
+            el campo <code>version</code> de la definición si corresponde; el <code>flow_id</code> va
+            dentro del JSON, no en la dirección de esta página.
+        </p>
+
+        {{ template "flashes" . }}
+
+        {{/*
+        🔴 EL TEXTAREA VUELVE CON LO QUE SE TECLEÓ cuando la publicación se rechaza por JSON inválido
+        (D-047.16), y ese es el motivo entero de que este formulario no vaya por POST-redirect-GET
+        como el resto de la consola. Un 303 aquí borraría la definición completa —que puede ser un
+        flujo de decenas de líneas— para no ganar nada: la validación es LOCAL, la petición no llegó a
+        salir y no hay ninguna mutación que un F5 pudiera repetir.
+
+        La rama contraria sí va por PRG: si la plataforma responde un error, la petición SALIÓ y
+        recargar sí podría publicar dos veces.
+        */}}
+        <form method="POST" action="/flujos" class="stack-form" id="form-publicar" autocomplete="off">
+            <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+            <input type="hidden" name="flow_id" value="{{ .FlowID }}">
+            <input type="hidden" name="is_new" value="{{ if .IsNew }}1{{ else }}0{{ end }}">
+            <div class="wapp-field">
+                <label class="wapp-field__label" for="definition">Definición (JSON)</label>
+                <textarea class="wapp-field__control mono" id="definition" name="definition"
+                          rows="20" spellcheck="false" required>{{ .Definition }}</textarea>
+            </div>
+            <div class="wapp-actions">
+                <button type="submit" class="btn btn--primary">Publicar versión</button>
+            </div>
+        </form>
+    </div>
+    {{ end }}
+</section>
+{{ end }}

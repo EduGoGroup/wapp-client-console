@@ -35,6 +35,26 @@
             <a href="/invitaciones" class="btn btn--text{{ if eq .CurrentPath "/invitaciones" }} btn--activo{{ end }}">Invitaciones</a>
             <a href="/roles" class="btn btn--text{{ if eq .CurrentPath "/roles" }} btn--activo{{ end }}">Roles</a>
             {{/*
+            El EDITOR (T6.5): las dos pantallas que llegan de wapp-guardian-bff en esta misma ola.
+            Van DESPUÉS de la administración de personas y antes del selector de empresas porque son
+            de otra cosa: quién entra en la empresa arriba, qué hace la conversación aquí.
+
+            🔴 «Disparadores» y no «Triggers», que es como se llama la pantalla en el BFF. Esta consola
+            traduce el vocabulario de cara a quien la usa —el BFF tenía «Dashboard» y aquí es
+            «Sesiones»—, y quien administra una panadería no tiene por qué saber qué es un trigger. Lo
+            que NO se traduce son los valores que viajan por el cable: dentro de la pantalla los tipos
+            siguen siendo `keyword`, `fallback`, `escape`, `event_start` y `event_stop`, porque eso es
+            lo que la plataforma guarda.
+
+            ⚠️ CADA ENLACE QUE ENTRA AQUÍ ESTRECHA LA BARRA. Con el selector de empresas, esta fila ya
+            expulsó «Cerrar sesión» fuera del área visible una vez (regresión de T5.3, arreglada en
+            4ad4721). Los candados de barra_test.go vigilan que todo contenedor flex con controles
+            pueda FLUIR, que es lo que impide que lo que no quepa se salga en vez de bajar de línea —
+            pero ningún test de Go mide píxeles: esto se comprueba en un navegador.
+            */}}
+            <a href="/flujos" class="btn btn--text{{ if eq .CurrentPath "/flujos" }} btn--activo{{ end }}">Flujos</a>
+            <a href="/disparadores" class="btn btn--text{{ if eq .CurrentPath "/disparadores" }} btn--activo{{ end }}">Disparadores</a>
+            {{/*
             El SELECTOR DE EMPRESAS (T5.3), y está aquí porque es el único punto que cubre las seis
             pantallas de una vez: cambiar de empresa es navegación, como cerrar sesión, no una
             operación de la tabla que se esté mirando.

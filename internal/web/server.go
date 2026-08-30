@@ -227,6 +227,30 @@ func NewRouterWithLimiter(cfg *config.Config) (*gin.Engine, func()) {
 	protected.POST("/roles/asignar", adminH.AssignRole)
 	protected.POST("/roles/retirar", adminH.UnassignRole)
 
+	// El EDITOR (T6.3 · T6.4): los flujos que la conversación recorre y los disparadores que deciden
+	// cuándo se entra en ellos. Mudado de wapp-guardian-bff, que se queda sin las dos pantallas en
+	// este mismo ciclo (REQ-08).
+	//
+	// 🔴 Los DOS POST que llevan formulario —publicar y crear— NO redirigen siempre, y es la única
+	// excepción al POST-redirect-GET universal de esta consola: D-047.16. Un rechazo de la validación
+	// LOCAL repinta con 400 y devuelve lo tecleado; el error de la API y el éxito van por 303 + flash.
+	// El razonamiento entero está en editor_handler.go y junto a redirectWith.
+	//
+	// El borrado va por POST y el cliente de la API lo traduce a DELETE, igual que la baja de un
+	// miembro: el navegador no emite DELETE y esta casa no tiene JavaScript.
+	//
+	// `/flujos/nuevo` cae en la ruta con parámetro y NO tiene ruta propia: `nuevo` es un VALOR MÁGICO
+	// que el handler reconoce y que pinta el formulario de alta sin llamar a la API (ver flujoNuevo).
+	// Registrarlo como hermano estático de `:id` no serviría de nada y sí escondería que el valor
+	// mágico existe.
+	protected.GET(rutaFlujos, adminH.ShowFlows)
+	protected.GET(rutaFlujos+"/:id", adminH.ShowFlowDetail)
+	protected.POST(rutaFlujos, adminH.PublishFlow)
+
+	protected.GET(rutaDisparadores, adminH.ShowTriggers)
+	protected.POST(rutaDisparadores, adminH.CreateTrigger)
+	protected.POST(rutaDisparadores+"/:id/borrar", adminH.DeleteTrigger)
+
 	var cleanup func()
 	if rateLimiter != nil {
 		cleanup = rateLimiter.Close
@@ -258,6 +282,10 @@ func parseTemplates() *template.Template {
 			}
 			return template.HTML(buf.String()), nil // #nosec G203
 		},
+		// `tabla` arma el descriptor del partial `data_table` desde la propia plantilla: html/template
+		// no sabe construir un valor compuesto, y describir la tabla en el handler la alejaría de la
+		// pantalla que la pinta. Ver table_view.go.
+		"tabla": tabla,
 	})
 	tmpl, err := root.ParseFS(templatesFS,
 		"templates/layouts/*.html",

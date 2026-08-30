@@ -669,6 +669,11 @@ func TestSinEmpresa_TodaPantallaQueLoPintaOfreceElMISMOCanje(t *testing.T) {
 		"invitaciones.html": "/invitaciones",
 		"roles.html":        "/roles",
 		"sesiones.html":     "/sesiones",
+		"flujos.html":       rutaFlujos,
+		// El detalle entra por el valor magico `nuevo`, que es el unico camino a esa plantilla que no
+		// depende de que exista un flujo.
+		"flujo.html":        rutaFlujos + "/" + flujoNuevo,
+		"disparadores.html": rutaDisparadores,
 	}
 
 	entradas, err := templatesFS.ReadDir("templates/pages")

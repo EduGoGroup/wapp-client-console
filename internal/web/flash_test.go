@@ -146,14 +146,22 @@ func TestFlash_TodosLosCodigosDeLasPantallasTienenTexto(t *testing.T) {
 	for _, code := range []string{flashSessionExpired, flashSelfRemoval, flashMissingField, flashAddedWithoutRole,
 		flashSessionNotYours, flashInvalidProfile, flashSessionOffline, flashSendTimeout, flashSendNotDelivered,
 		flashInvalidTTL, flashInvitationLost, flashInvitationRedeemed, flashInvitationUnknown,
-		flashInvitationExpired, flashInvitationUnusable, flashJoinedRelogin} {
+		flashInvitationExpired, flashInvitationUnusable, flashJoinedRelogin,
+		// Los del EDITOR (T6.3/T6.4). Los nueve de validación local no viajan nunca por la URL —se
+		// pintan repintando el formulario (D-047.16)—, pero su texto sale de esta misma tabla: uno
+		// escrito a mano en el handler sería el único de la consola fuera del catálogo.
+		flashFlowInvalidJSON, flashFlowVersionConflict, flashTriggerDuplicate, flashTriggerWithoutEventStart,
+		flashTriggerPriorityNotInteger, flashTriggerKeywordIncomplete, flashTriggerFallbackWithoutFlow,
+		flashTriggerEscapeWithoutKeyword, flashTriggerEventStartNoKeyword, flashTriggerEventStartNoKind,
+		flashTriggerEventKindUnknown, flashTriggerEventStopWithoutKey, flashTriggerKindUnknown} {
 		if !flashErrors.Known(code) {
 			t.Errorf("el código de error %q no tiene texto", code)
 		}
 	}
 	for _, code := range []string{flashLoggedOut, flashMemberAdded, flashMemberRemoved, flashRoleCreated,
 		flashRoleAssigned, flashRoleRemoved, flashMessageSent, flashProfileActive, flashProfilePassive,
-		flashInvitationRevoked, flashInvitationAccepted} {
+		flashInvitationRevoked, flashInvitationAccepted,
+		flashFlowPublished, flashTriggerCreated, flashTriggerDeleted} {
 		if !flashSuccesses.Known(code) {
 			t.Errorf("el código de éxito %q no tiene texto", code)
 		}
@@ -346,5 +354,91 @@ func TestFlash_UnCodigoInventadoNoVuelveAlaPantalla(t *testing.T) {
 	}
 	if got := flashSuccess(inyectado); strings.Contains(got, "script") {
 		t.Errorf("el código del query string acabó en el mensaje de éxito: %q", got)
+	}
+}
+
+// TestFlash_ElPlanoDelEditorConservaSusTresSignificados.
+//
+// flashCodeForEditor existe por tres desenlaces que el traductor GENÉRICO se comería, y cada caso va
+// con su GEMELO —lo que el genérico habría dicho— para que el test se caiga si alguien «simplifica»
+// el traductor en vez de dejar un texto equivocado en pantalla.
+//
+// 🔴 Dos de los tres HOY NO LOS EMITE LA PLATAFORMA (los dos 409: publicar versiona N+1 sin comprobar
+// contra qué se editaba, y crear un disparador no tiene unicidad). Se traducen igual y se prueban
+// aquí, contra el sentinela, que es donde sí se puede: el día que existan, no caerán en la rama por
+// defecto.
+func TestFlash_ElPlanoDelEditorConservaSusTresSignificados(t *testing.T) {
+	t.Parallel()
+
+	casos := []struct {
+		nombre     string
+		err        error
+		want       string
+		genericoDa string
+	}{
+		{"la regla dejaría la conversación sin salida (422)", apiclient.ErrTriggerWithoutEventStart,
+			flashTriggerWithoutEventStart, flashInvalidInput},
+		{"ya existe un disparador igual (409)", apiclient.ErrTriggerDuplicate, flashTriggerDuplicate, flashConflict},
+		{"alguien publicó entre medias (409)", apiclient.ErrFlowVersionConflict, flashFlowVersionConflict, flashConflict},
+	}
+	for _, caso := range casos {
+		envuelto := fmt.Errorf("editor: %w", caso.err)
+		if got := flashCodeForEditor(envuelto); got != caso.want {
+			t.Errorf("%s dio %q, want %q", caso.nombre, got, caso.want)
+		}
+		if got := flashCodeFor(envuelto); got != caso.genericoDa {
+			t.Errorf("%s: el genérico dio %q, want %q — si ya distingue el desenlace, este test dejó de probar nada",
+				caso.nombre, got, caso.genericoDa)
+		}
+	}
+
+	// Los tres textos son distintos entre sí: dos desenlaces con el mismo consejo mandan a hacer lo
+	// que no toca.
+	vistos := make(map[string]string, len(casos))
+	for _, caso := range casos {
+		texto := flashError(caso.want)
+		if otro, repetido := vistos[texto]; repetido {
+			t.Errorf("%q y %q dan el MISMO texto: %q", caso.nombre, otro, texto)
+		}
+		vistos[texto] = caso.nombre
+	}
+
+	// Y lo que no es de este plano sigue cayendo por el genérico: un traductor propio que no delegara
+	// sería una tabla paralela que se desincroniza.
+	for _, caso := range []struct {
+		err  error
+		want string
+	}{
+		{fmt.Errorf("x: %w", apiclient.ErrForbidden), flashForbidden},
+		{fmt.Errorf("x: %w", apiclient.ErrNotFound), flashNotInYourTenant},
+		{fmt.Errorf("x: %w", apiclient.ErrInvalidInput), flashInvalidInput},
+		{fmt.Errorf("x: %w", apiclient.ErrUnauthorized), flashSessionExpired},
+		{errors.New("fallo de red"), flashUpstreamUnavailable},
+		{nil, ""},
+	} {
+		if got := flashCodeForEditor(caso.err); got != caso.want {
+			t.Errorf("flashCodeForEditor(%v) = %q, want %q", caso.err, got, caso.want)
+		}
+	}
+}
+
+// TestFlash_ElAvisoDel422NoMandaARevisarElFormulario.
+//
+// El 422 de crear un disparador es el ÚNICO de los tres que la plataforma devuelve hoy, y su texto se
+// fija por su EFECTO: quien lo lee tiene el formulario BIEN: lo que falta está fuera de él —un
+// `event_start` en la empresa que le dé salida a la conversación—. «Revisa lo que escribiste» lo
+// mandaría a buscar un error donde no lo hay, que es el defecto de campo de la Ola 5 con otro número.
+func TestFlash_ElAvisoDel422NoMandaARevisarElFormulario(t *testing.T) {
+	t.Parallel()
+
+	texto := flashError(flashTriggerWithoutEventStart)
+	if !strings.Contains(texto, "event_start") {
+		t.Errorf("el aviso del 422 no dice qué falta fuera del formulario: %q", texto)
+	}
+	if strings.Contains(strings.ToLower(texto), "revisa lo que escribiste") {
+		t.Errorf("el aviso del 422 manda a revisar un formulario que está bien: %q", texto)
+	}
+	if !strings.Contains(texto, "bien escrito") {
+		t.Errorf("el aviso del 422 no dice que los datos están bien: %q", texto)
 	}
 }

@@ -136,6 +136,53 @@ const (
 	// la forma más rápida de convencer a alguien de que el canje no funcionó.
 	flashJoinedRelogin = "joined_relogin"
 
+	// --- Desenlaces del EDITOR: flujos y disparadores (T6.3 · T6.4) ---
+	//
+	// 🔴 Este bloque tiene DOS familias y no una, y la diferencia no es de tema sino de RESPUESTA
+	// (D-047.16): los códigos de VALIDACIÓN LOCAL —los que empiezan por trigger_ y el del JSON— se
+	// pintan REPINTANDO el formulario con un 400, y no viajan nunca por el query string; los que
+	// traducen un desenlace de la API viajan en el `?error=` de un 303. Los dos salen de esta misma
+	// tabla a propósito: un texto escrito a mano en el handler es el que acaba diciendo otra cosa
+	// que el catálogo ante el mismo desenlace.
+
+	// flashFlowInvalidJSON lo emite la publicación ante una definición que no es JSON. Es validación
+	// LOCAL: no sale a la red, y por eso su pantalla REPINTA (400) en vez de redirigir. Ver
+	// PublishFlow y D-047.16.
+	flashFlowInvalidJSON = "flow_invalid_json"
+	// flashFlowVersionConflict traduce el 409 de publicar: alguien publicó entre medias.
+	//
+	// ⚠️ HOY LA PLATAFORMA NO LO EMITE (ver ErrFlowVersionConflict en apiclient/editor.go). Se
+	// traduce igual porque el día que lo emita —o lo emita un proxy por delante— caería en el
+	// genérico «ya existe algo con ese nombre en tu empresa», que ante una publicación no describe
+	// nada.
+	flashFlowVersionConflict = "flow_version_conflict"
+
+	// flashTriggerDuplicate traduce el 409 de crear un disparador, con el mismo matiz: la plataforma
+	// no tiene unicidad y hoy no lo emite.
+	flashTriggerDuplicate = "trigger_duplicate"
+	// flashTriggerWithoutEventStart traduce el 422 de crear, y es el ÚNICO de los tres que la
+	// plataforma SÍ devuelve hoy (D-054.8 / MD-054.2).
+	//
+	// 🔴 Es el que no puede caer al genérico: `statusError` mete 400 y 422 en el mismo
+	// ErrInvalidInput, así que sin este código la pantalla diría «revisa lo que escribiste» ante un
+	// formulario cuyos datos están TODOS bien. Lo que falta no está en el formulario: falta un
+	// `event_start` en la empresa que le dé salida a la conversación.
+	flashTriggerWithoutEventStart = "trigger_without_event_start"
+
+	// Los OCHO desenlaces de validateTriggerForm y el de la prioridad. Son códigos y no textos
+	// escritos en el handler porque el vocabulario de esta consola es cerrado, y son NUEVE y no uno
+	// porque cada uno dice qué campo falta: un «revisa el formulario» genérico ante ocho campos deja
+	// a quien administra probando a ciegas.
+	flashTriggerPriorityNotInteger   = "trigger_priority_not_integer"
+	flashTriggerKeywordIncomplete    = "trigger_keyword_incomplete"
+	flashTriggerFallbackWithoutFlow  = "trigger_fallback_without_flow"
+	flashTriggerEscapeWithoutKeyword = "trigger_escape_without_keyword"
+	flashTriggerEventStartNoKeyword  = "trigger_event_start_without_keyword"
+	flashTriggerEventStartNoKind     = "trigger_event_start_without_kind"
+	flashTriggerEventKindUnknown     = "trigger_event_kind_unknown"
+	flashTriggerEventStopWithoutKey  = "trigger_event_stop_without_keyword"
+	flashTriggerKindUnknown          = "trigger_kind_unknown"
+
 	// --- Desenlaces del SELECTOR DE EMPRESAS (T5.3) ---
 
 	// flashTenantNotYours traduce el 404 de POST /api/v1/auth/active-tenant.
@@ -152,6 +199,13 @@ const (
 	// Vive entre los ERRORES por lo mismo que flashJoinedRelogin: pintarlo como éxito dejaría a la
 	// persona mirando los datos de la empresa ANTERIOR justo después de leer que ya cambió.
 	flashTenantRelogin = "tenant_relogin"
+
+	// Los TRES éxitos del editor. «Publicado» no dice la versión y no puede decirla —el catálogo
+	// traduce códigos, no interpola datos—; la versión nueva está en la lista a la que se redirige,
+	// que es donde se comprueba de verdad.
+	flashFlowPublished  = "flow_published"
+	flashTriggerCreated = "trigger_created"
+	flashTriggerDeleted = "trigger_deleted"
 
 	flashMemberAdded   = "member_added"
 	flashMemberRemoved = "member_removed"
@@ -234,6 +288,25 @@ var (
 			"nada sobre las empresas que no son tuyas, a propósito.",
 		flashTenantRelogin: "La empresa quedó elegida, pero esta sesión todavía no lo ve. Cierra sesión y vuelve a " +
 			"entrar y estarás dentro de ella.",
+		flashFlowInvalidJSON: "Eso no es un JSON válido, así que no se ha publicado nada. Revisa la definición " +
+			"—lo que escribiste sigue aquí— y vuelve a intentarlo.",
+		flashFlowVersionConflict: "Ese flujo cambió mientras lo editabas: alguien publicó otra versión. " +
+			"Vuelve a abrirlo, comprueba la definición que hay ahora y publica sobre ella.",
+		flashTriggerDuplicate: "Ya existe un disparador igual en tu empresa. Revisa el listado antes de crear otro.",
+		flashTriggerWithoutEventStart: "El disparador está bien escrito, pero guardarlo dejaría la conversación sin " +
+			"salida: tu empresa no tiene ningún disparador de tipo event_start que lleve a un evento. Crea ese " +
+			"primero y luego vuelve a este.",
+		flashTriggerPriorityNotInteger:   "La prioridad tiene que ser un número entero.",
+		flashTriggerKeywordIncomplete:    "Un disparador de tipo keyword necesita la palabra clave Y el flujo al que lleva.",
+		flashTriggerFallbackWithoutFlow:  "Un disparador de tipo fallback necesita el flujo al que lleva.",
+		flashTriggerEscapeWithoutKeyword: "Un disparador de tipo escape necesita la palabra clave que corta la conversación.",
+		flashTriggerEventStartNoKeyword:  "Un disparador de tipo event_start necesita la palabra clave que arranca el evento.",
+		flashTriggerEventStartNoKind: "Un disparador de tipo event_start necesita además el tipo de evento: " +
+			"menu, cart, survey o media.",
+		flashTriggerEventKindUnknown:    "Ese tipo de evento no existe. Elige menu, cart, survey o media.",
+		flashTriggerEventStopWithoutKey: "Un disparador de tipo event_stop necesita la palabra clave que desactiva el evento.",
+		flashTriggerKindUnknown: "Elige un tipo de disparador de la lista: keyword, fallback, escape, event_start " +
+			"o event_stop.",
 	})
 
 	flashSuccesses = sharedweb.NewFlashCatalog("Acción completada.", map[string]string{
@@ -253,6 +326,11 @@ var (
 		flashInvitationAccepted: "¡Listo! Ya formas parte de la empresa y puedes empezar a trabajar.",
 		flashTenantSwitched: "Estás en la empresa que elegiste. Todo lo que veas a partir de ahora —sesiones, " +
 			"miembros, roles e invitaciones— es de ella y solo de ella.",
+		flashFlowPublished: "Flujo publicado como una versión NUEVA. Las anteriores siguen ahí: los flujos son " +
+			"inmutables y la plataforma no edita en sitio.",
+		flashTriggerCreated: "Disparador creado.",
+		flashTriggerDeleted: "Disparador borrado. Los flujos a los que llevaba siguen publicados: lo que se " +
+			"retiró es la regla que los arrancaba.",
 	})
 )
 
@@ -364,6 +442,39 @@ func flashCodeForCanje(err error) string {
 		return flashInvitationExpired
 	case errors.Is(err, apiclient.ErrInvitationUnusable):
 		return flashInvitationUnusable
+	default:
+		return flashCodeFor(err)
+	}
+}
+
+// flashCodeForEditor es el traductor del plano del EDITOR —flujos y disparadores— y existe por lo
+// mismo que flashCodeForSessions y flashCodeForInvitaciones: hay desenlaces cuyo significado es
+// propio de este plano y que el traductor general se comería.
+//
+// Son TRES, y el ORDEN de las ramas es contrato: los tres sentinelas ENVUELVEN a su genérico
+// (apiclient/editor.go lo declara así a propósito), de modo que preguntar antes por el genérico se
+// come el significado sin que nada falle — el usuario lee un texto equivocado y todo sigue verde.
+//
+//   - 422 · ErrTriggerWithoutEventStart. Es el ÚNICO de los tres que la plataforma devuelve hoy, y
+//     el que hace falta de verdad: `statusError` mete 400 y 422 en el MISMO ErrInvalidInput, así que
+//     por el genérico la pantalla diría «revisa lo que escribiste» ante un formulario correcto. Es
+//     el defecto de campo de la Ola 5 con otro número.
+//   - 409 de crear · ErrTriggerDuplicate, y 409 de publicar · ErrFlowVersionConflict. HOY LA
+//     PLATAFORMA NO EMITE NINGUNO (no hay unicidad en triggers, y publicar versiona N+1 sin
+//     comprobar contra qué se editaba). Se traducen igual porque el día que existan —o los ponga un
+//     proxy— caerían en «ya existe algo con ese nombre en tu empresa», que ante una publicación no
+//     describe nada.
+//
+// Es UNO para los dos planos y no dos: publicar no puede producir los de disparador ni al revés, y
+// dos tablas que se copian el resto son dos tablas esperando a desincronizarse.
+func flashCodeForEditor(err error) string {
+	switch {
+	case errors.Is(err, apiclient.ErrTriggerWithoutEventStart):
+		return flashTriggerWithoutEventStart
+	case errors.Is(err, apiclient.ErrTriggerDuplicate):
+		return flashTriggerDuplicate
+	case errors.Is(err, apiclient.ErrFlowVersionConflict):
+		return flashFlowVersionConflict
 	default:
 		return flashCodeFor(err)
 	}

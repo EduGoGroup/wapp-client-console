@@ -1,0 +1,56 @@
+{{ define "flujos.html" }}
+<section class="page-wide">
+    {{ if .SinEmpresa }}
+    {{ template "sin_empresa" . }}
+    {{ else }}
+    <div class="wapp-card">
+        <h1 class="wapp-title">Flujos</h1>
+        <p class="wapp-subtitle">
+            Un menú y una encuesta son las dos un flujo con versiones. Publicar guarda una versión
+            nueva: los flujos son inmutables y la plataforma no edita en sitio.
+        </p>
+
+        {{ template "flashes" . }}
+
+        {{/*
+        🔴 AQUÍ NO VA EL DISTINTIVO «PROVISIONAL» que llevan las tres pantallas del BFF. No es un
+        olvido al copiar: allí decía que esta pantalla migraba a la consola de administración
+        (ADR-0047), y esta ES la consola de administración. Repetirlo aquí prometería una mudanza que
+        ya ocurrió.
+        */}}
+
+        <div class="wapp-actions">
+            <a href="/flujos/nuevo" class="btn btn--primary">Nuevo flujo</a>
+        </div>
+    </div>
+
+    <div class="wapp-card card-stacked" id="section-listado">
+        {{ if .FlowsError }}
+        <p class="section-note" id="flujos-degradado">
+            No se pudo leer el listado de flujos ahora mismo. Puedes publicar igualmente desde
+            «Nuevo flujo»: publicar no necesita el listado.
+        </p>
+        {{ else if .Flows }}
+        {{ template "data_table" (tabla . "table-flujos" "Flujos publicados por esta empresa" "flujos_filas" "Flujo" "Versión" "Creado" "Acciones") }}
+        {{ else }}
+        <p class="empty-state" id="flujos-vacio">
+            Esta empresa todavía no tiene flujos. Crea uno desde «Nuevo flujo» para empezar.
+        </p>
+        {{ end }}
+    </div>
+    {{ end }}
+</section>
+{{ end }}
+
+{{/*
+LAS FILAS de la tabla de flujos. El partial le pasa a esta plantilla el DOT DE LA PÁGINA, no la
+lista, así que `$` sigue significando lo mismo que dentro de la página (ver partials/data_table.html).
+*/}}
+{{ define "flujos_filas" }}{{ range .Flows }}
+                <tr>
+                    <td><code class="mono">{{ .FlowID }}</code></td>
+                    <td><span class="wapp-chip wapp-chip--info">v{{ .Version }}</span></td>
+                    <td class="mono">{{ if .CreatedAt }}{{ .CreatedAt }}{{ else }}—{{ end }}</td>
+                    <td><a href="/flujos/{{ .FlowID }}" class="btn btn--text">Ver / editar</a></td>
+                </tr>
+                {{ end }}{{ end }}

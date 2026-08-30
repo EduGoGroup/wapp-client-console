@@ -55,11 +55,21 @@ func ejerceTodasLasPantallas(t *testing.T) *stubAPI {
 		// elección, que es la excepción a INV-04 y por tanto lo que más falta hace ejercitar aquí.
 		rutaListadoDeEmpresas: {http.StatusOK, dosEmpresas()},
 		rutaEleccionDeEmpresa: {http.StatusNoContent, ""},
+		// El EDITOR (T6.3/T6.4). Publicar es la llamada cuyo cuerpo lleva un JSON ENTERO escrito por
+		// el usuario, así que es por donde un `tenant_id` de más se colaría sin que se note: la
+		// consola lo envuelve en `{definition}` y no toca lo de dentro.
+		"GET /api/v1/flows":            {http.StatusOK, flowsBody(flowJSON(testFlowID, 3, ""))},
+		"GET /api/v1/flows/{id}":       {http.StatusOK, flowDefinitionBody},
+		"POST /api/v1/flows":           {http.StatusCreated, `{"flow_id":"` + testFlowID + `","version":4}`},
+		"GET /api/v1/triggers":         {http.StatusOK, triggersBody(disparadorNormal)},
+		"POST /api/v1/triggers":        {http.StatusCreated, disparadorNormal},
+		"DELETE /api/v1/triggers/{id}": {http.StatusNoContent, ""},
 	})
 	router := adminRouter(api)
 	sess := clientSessionCookie(t)
 
-	for _, ruta := range []string{"/", "/sesiones", "/miembros", "/roles", "/invitaciones"} {
+	for _, ruta := range []string{"/", "/sesiones", "/miembros", "/roles", "/invitaciones",
+		rutaFlujos, rutaFlujos + "/" + testFlowID, rutaDisparadores} {
 		if rec := getWithSession(t, router, ruta); rec.Code != http.StatusOK {
 			t.Fatalf("GET %s status = %d, want 200", ruta, rec.Code)
 		}
@@ -82,10 +92,20 @@ func ejerceTodasLasPantallas(t *testing.T) *stubAPI {
 	postFormWithCSRF(router, "/invitaciones", url.Values{"ttl": {"86400"}, "role_id": {testTenantRoleID}}, sess)
 	postFormWithCSRF(router, "/invitaciones/"+testInvitacionPendiente+"/revocar", url.Values{}, sess)
 	postFormWithCSRF(router, "/invitaciones/canjear", url.Values{"token": {testInviteToken}}, sess)
+	// Las TRES del editor. La publicación va con una definición de verdad porque su cuerpo es lo que
+	// el usuario escribió, no un formulario de campos sueltos.
+	postFormWithCSRF(router, rutaFlujos, url.Values{
+		"flow_id": {testFlowID}, "is_new": {"0"},
+		"definition": {`{"flow_id":"` + testFlowID + `","version":4,"initial":"a","nodes":{}}`},
+	}, sess)
+	postFormWithCSRF(router, rutaDisparadores, url.Values{
+		"kind": {"keyword"}, "keyword": {"hola"}, "flow_id": {testFlowID}, "match_type": {"exact"},
+	}, sess)
+	postFormWithCSRF(router, rutaDisparadores+"/"+testTriggerID+"/borrar", url.Values{}, sess)
 	// Y la elección de empresa, que es la única llamada de toda la superficie que manda un tenant.
 	postFormWithCSRF(router, rutaEmpresa, url.Values{"tenant_id": {testOtherTenantID}}, sess)
 
-	if len(api.Requests()) < 19 {
+	if len(api.Requests()) < 25 {
 		t.Fatalf("solo se capturaron %d peticiones: el recorrido no ejercitó la superficie completa (%v)",
 			len(api.Requests()), routesOf(api.Requests()))
 	}

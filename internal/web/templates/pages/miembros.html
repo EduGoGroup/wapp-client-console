@@ -87,17 +87,23 @@
 
     <div class="wapp-card card-stacked" id="section-listado">
         {{ if .Members }}
-        <table class="data-table" id="table-members">
-            <caption class="data-table__caption">Personas dadas de alta en esta empresa</caption>
-            <thead>
-                <tr>
-                    <th scope="col">Identificador</th>
-                    <th scope="col">Alta</th>
-                    <th scope="col">Acciones</th>
-                </tr>
-            </thead>
-            <tbody>
-                {{ range .Members }}
+        {{ template "data_table" (tabla . "table-members" "Personas dadas de alta en esta empresa" "miembros_filas" "Identificador" "Alta" "Acciones") }}
+        {{ else }}
+        <p class="empty-state" id="members-vacio">
+            Todavía no hay nadie más en esta empresa.
+        </p>
+        {{ end }}
+    </div>
+    {{ end }}
+</section>
+{{ end }}
+
+{{/*
+LAS FILAS de la tabla de miembros, extraídas al armazón compartido (T6.2). El HTML de las celdas está
+VERBATIM: `$` sigue siendo el dot de la página porque el partial se lo pasa entero, así que
+`$.CSRFToken` del formulario de baja significa exactamente lo mismo que antes de mudarse.
+*/}}
+{{ define "miembros_filas" }}{{ range .Members }}
                 <tr>
                     <td>
                         <code class="mono" title="{{ .UserID }}">{{ .Short }}</code>
@@ -115,15 +121,4 @@
                         {{ end }}
                     </td>
                 </tr>
-                {{ end }}
-            </tbody>
-        </table>
-        {{ else }}
-        <p class="empty-state" id="members-vacio">
-            Todavía no hay nadie más en esta empresa.
-        </p>
-        {{ end }}
-    </div>
-    {{ end }}
-</section>
-{{ end }}
+                {{ end }}{{ end }}
