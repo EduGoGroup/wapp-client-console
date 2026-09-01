@@ -9,6 +9,22 @@
             <p class="wapp-subtitle">Consola de administración de tu empresa</p>
         </div>
 
+        <!-- Componente Alpha: Selector de Usuarios de Prueba (solo si EnableAlphaTestAccounts está
+             activo). Copiado de wapp-guardian-bff/wapp-edge-agent para la fase alpha; se retira
+             entero al cerrarla. -->
+        {{ if .EnableAlphaTestAccounts }}
+        <div class="wapp-field wapp-field--alpha" id="alpha-user-container">
+            <label class="wapp-field__label" for="alpha-user-select">
+                <span>Usuario de prueba (Alpha)</span>
+            </label>
+            <select class="wapp-field__control" id="alpha-user-select" aria-label="Selecciona un usuario de prueba">
+                <option value="" selected disabled>Selecciona para autocompletar el email...</option>
+                <option value="admin@e2e.local" data-email="admin@e2e.local" data-password="{{ .AlphaTestPassword }}">Administrador e2e (admin@e2e.local)</option>
+                <option value="admin-b@e2e.local" data-email="admin-b@e2e.local" data-password="{{ .AlphaTestPassword }}">Admin Tenant B (admin-b@e2e.local)</option>
+            </select>
+        </div>
+        {{ end }}
+
         {{ if .Success }}
         <div class="wapp-snackbar wapp-snackbar--success" role="status">
             {{ .Success }}
@@ -43,4 +59,26 @@
         </form>
     </div>
 </section>
+
+{{ if .EnableAlphaTestAccounts }}
+<script nonce="{{ .Nonce }}">
+(function() {
+    const selector = document.getElementById('alpha-user-select');
+    if (!selector) return;
+
+    selector.addEventListener('change', function(e) {
+        const selectedOption = e.target.options[e.target.selectedIndex];
+        const email = selectedOption.getAttribute('data-email');
+        const password = selectedOption.getAttribute('data-password') || '';
+
+        if (email) {
+            const emailInput = document.getElementById('login-email');
+            const passwordInput = document.getElementById('login-password');
+            if (emailInput) emailInput.value = email;
+            if (passwordInput) passwordInput.value = password;
+        }
+    });
+})();
+</script>
+{{ end }}
 {{ end }}

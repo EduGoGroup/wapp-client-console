@@ -269,10 +269,12 @@ func (h *AuthHandler) withAuthRetry(c *gin.Context, fn func(accessToken string) 
 // dentro del HTML. Va vacío en el GET inicial.
 func (h *AuthHandler) renderLogin(c *gin.Context, status int, errMsg, successMsg, email string) {
 	renderer.HTML(c, status, "login.html", gin.H{
-		"Title":    "Iniciar sesión",
-		"Subtitle": "Consola del cliente",
-		"Error":    errMsg,
-		"Success":  successMsg,
-		"Email":    email,
+		"Title":                   "Iniciar sesión",
+		"Subtitle":                "Consola del cliente",
+		"Error":                   errMsg,
+		"Success":                 successMsg,
+		"Email":                   email,
+		"EnableAlphaTestAccounts": h.cfg.EnableAlphaTestAccounts,
+		"AlphaTestPassword":       h.cfg.AlphaTestPassword,
 	})
 }

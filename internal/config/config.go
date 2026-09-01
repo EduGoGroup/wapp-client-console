@@ -49,6 +49,15 @@ type Config struct {
 	ShutdownTimeout   time.Duration
 	UpstreamTimeout   time.Duration
 
+	// EnableAlphaTestAccounts habilita el selector de "Usuario de prueba (Alpha)" en el login: el
+	// mismo atajo que ya vive en wapp-guardian-bff y wapp-edge-agent (WAPP_ALPHA_TEST_ACCOUNTS,
+	// alias WAPP_ENABLE_ALPHA_LOGIN). Default false. Se retira por completo al cerrar la fase alpha.
+	EnableAlphaTestAccounts bool
+
+	// AlphaTestPassword autocompleta el campo de contraseña del selector Alpha. Sale de
+	// WAPP_ALPHA_TEST_PASSWORD; vacía por defecto, y sin efecto si EnableAlphaTestAccounts es false.
+	AlphaTestPassword string
+
 	// QuoteSuggestionTimeout es el plazo de LA ÚNICA RUTA DE ESTA CONSOLA QUE ESPERA A QUE UN MODELO
 	// REDACTE: POST /solicitudes/{id}/sugerir-respuesta (Plan 047 · T7.6, sobre el endpoint del Plan
 	// 044 · T5.1).
@@ -121,6 +130,9 @@ func Load() Config {
 
 		QuoteSuggestionTimeout: time.Duration(l.GetInt("CONSOLE_QUOTE_SUGGESTION_TIMEOUT_SECS",
 			int(DefaultQuoteSuggestionTimeout/time.Second))) * time.Second,
+
+		EnableAlphaTestAccounts: l.GetBool("ALPHA_TEST_ACCOUNTS", l.GetBool("ENABLE_ALPHA_LOGIN", false)),
+		AlphaTestPassword:       l.GetString("ALPHA_TEST_PASSWORD", ""),
 	}
 }
 
