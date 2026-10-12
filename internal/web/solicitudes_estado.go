@@ -13,7 +13,7 @@ import (
 //
 // Que quede claro qué NO es, porque la distinción es la que sostiene esta pantalla: aquí no hay
 // máquina de estados. No se dice desde dónde se llega a cada estado ni adónde se puede ir —eso lo
-// decide `internal/intakes/status.go` de la plataforma y viaja por la API—. Esto es una tabla de
+// decide `internal/modulos/solicitudes/intakes/status.go` de la plataforma y viaja por la API—. Esto es una tabla de
 // nombres, y su peor fallo posible es cosmético: si mañana aparece un estado nuevo, statusLabel
 // devuelve la clave cruda y el filtro no lo lista, pero nada opera mal ni se ofrece una transición
 // falsa.

@@ -11,7 +11,7 @@ import (
 // Hasta esta casilla el gate por plan era SOLO DE PLANTILLA: `home.html` no emite el bloque de la
 // importación de catálogo sin `catalog_import`, y eso es todo. No existía —ni aquí ni en
 // `wapp-shared/web`— ningún `RequireFeature` ni equivalente: la única implementación del ecosistema
-// vive en el cloud (`internal/entitlements/middleware.go`) y NO es portable —es net/http, lee un
+// vive en el cloud (`internal/modulos/acceso/entitlements/middleware.go`) y NO es portable —es net/http, lee un
 // token de API en vez de una sesión de cookie y responde JSON—.
 //
 // 🔴 POR QUÉ NO BASTA CON ESCONDER EL ENLACE, que es lo que esta consola ya sabía hacer: esconder un

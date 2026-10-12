@@ -120,7 +120,8 @@ var llamadasDeLaBandeja = []struct {
 // Es el test que sobrevive a una refactorización: cambiar el struct de respuesta rompe la
 // decodificación y se nota, pero equivocarse de ruta o de verbo compila, pasa los tipos y solo se ve
 // en campo como un 404 inexplicable. Los diez endpoints están medidos contra el registro de rutas del
-// cloud (`internal/publicapi/publicapi.go`), no contra lo que el plan afirmaba.
+// cloud (`internal/apipublica/`, donde cada ruta se registra junto a su handler), no contra lo que el
+// plan afirmaba.
 func TestIntakes_LasDiezVanASuVerboYSuRuta(t *testing.T) {
 	t.Parallel()
 

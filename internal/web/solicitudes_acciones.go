@@ -157,8 +157,8 @@ type accionesView struct {
 //
 // 🔑 `Posicion` es 1-based y sale de sumarle uno al `index` del contrato. Ese `index` es la posición
 // dentro de `lines` DE LA ÚLTIMA REVISIÓN, y está verificado en la plataforma: `LinesWithoutPrice`
-// recorre el payload con el índice del bucle (cloud/wapp-cloud-platform/internal/intakes/
-// approve.go:283) y `PendingPriceLines` mira solo la revisión de número más alto. Se deja escrito con
+// recorre el payload con el índice del bucle (cloud/wapp-cloud-platform/internal/modulos/
+// solicitudes/intakes/approve.go:270) y `PendingPriceLines` mira solo la revisión de número más alto. Se deja escrito con
 // fichero y línea porque es una asunción sobre un contrato AJENO.
 //
 // 🔴 LO QUE ESA POSICIÓN **NO** ES, y por eso el defecto NO se ancla a una fila del formulario del

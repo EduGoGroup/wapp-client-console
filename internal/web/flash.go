@@ -306,8 +306,8 @@ const (
 	// Quien las mezcle deja a la dueña deduciendo, sobre un mensaje que no puede desenviar.
 	//
 	// 🔑 De dónde sale que se pueda AFIRMAR «no se envió nada» en cada uno: del ORDEN de operaciones
-	// del cloud, que está escrito y verificado —`cloud/wapp-cloud-platform/internal/intakes/
-	// approve.go:373` valida TODO (texto, estado, líneas sin precio, líneas que cotizar) antes de la
+	// del cloud, que está escrito y verificado —`Approve`, en
+	// `cloud/wapp-cloud-platform/internal/modulos/solicitudes/intakes/approve.go:402`, valida TODO (texto, estado, líneas sin precio, líneas que cotizar) antes de la
 	// primera escritura, y el envío es el paso (4), después de la transición y de la revisión—. No es
 	// una analogía con `invalid_items`: es el dato del otro lado.
 
