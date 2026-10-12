@@ -76,7 +76,7 @@ type IntakePage struct {
 //
 // AllowedTransitions son los destinos válidos desde el estado actual, y es lo que alimenta el
 // selector de la pantalla: esta consola NO replica la máquina de estados —que vive en
-// `internal/intakes/status.go` de la plataforma— porque un mapa duplicado se desincroniza a la
+// `internal/modulos/solicitudes/intakes/status.go` de la plataforma— porque un mapa duplicado se desincroniza a la
 // primera transición nueva.
 //
 // El campo es un puntero deliberado, porque hay dos «sin destinos» que no significan lo mismo:
